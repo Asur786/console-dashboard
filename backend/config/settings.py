@@ -15,8 +15,11 @@ class Settings:
     def __init__(self) -> None:
         # Load .env file if present (for local development)
         try:
+            from pathlib import Path
             from dotenv import load_dotenv
-            load_dotenv()
+            # Look for .env in the backend/ directory regardless of cwd
+            env_path = Path(__file__).parent.parent / ".env"
+            load_dotenv(env_path)
         except ImportError:
             pass  # python-dotenv is optional in production
 

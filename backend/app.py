@@ -6,12 +6,18 @@ Run locally:
     uvicorn app:app --reload --port 8000
 
 Databricks Apps deployment:
-    app.yml points to this file.
+    app.yml runs: python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
     React frontend is built to ../dist/ and served as static files.
 """
 
-import os
+import sys
 from pathlib import Path
+
+# Ensure backend/ is on sys.path so "from config..." / "from routes..." works
+# whether uvicorn is started from backend/ (local) or project root (Databricks)
+_BACKEND_DIR = Path(__file__).parent.resolve()
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

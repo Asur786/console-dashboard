@@ -1,0 +1,6 @@
+# Python backend dependencies — Databricks Apps reads this from the project root
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.11.3
+python-dotenv==1.1.0
+databricks-sql-connector==3.7.0
