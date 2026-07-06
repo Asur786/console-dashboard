@@ -34,7 +34,7 @@ const MarketBreakdown: React.FC<MarketBreakdownProps> = ({ data }) => {
           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
           <XAxis dataKey="country" tick={{ fontSize: 12 }} />
           <YAxis tickFormatter={fmtY} tick={{ fontSize: 11 }} width={62} />
-          <Tooltip formatter={(v: number) => [fmtY(v), '']} />
+          <Tooltip formatter={(v) => [fmtY(Number(v)), '']} />
           <Legend />
           <Bar dataKey="currentYearSales" name="CY 2024" fill="#0078d4" radius={[4, 4, 0, 0]} />
           <Bar dataKey="previousYearSales" name="PY 2023" fill="#c7e0f4" radius={[4, 4, 0, 0]} />

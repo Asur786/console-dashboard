@@ -1,4 +1,4 @@
-import type { ExecKpi, ExecFilters } from '../../types/executive.types';
+import type { ExecKpi, ExecFilters } from '../../../types/executive.types';
 
 /**
  * Returns mock KPI values for the Executive Summary page.

@@ -33,9 +33,9 @@ const BrandBreakdown: React.FC<BrandBreakdownProps> = ({ data }) => {
           <XAxis type="number" tickFormatter={fmtX} tick={{ fontSize: 11 }} />
           <YAxis type="category" dataKey="brand" tick={{ fontSize: 12 }} width={88} />
           <Tooltip
-            formatter={(v: number, _name: string, props: { payload?: BrandPerformance }) => [
-              fmtX(v),
-              props.payload?.category ?? '',
+            formatter={(v) => [
+              fmtX(Number(v)),
+              '',
             ]}
           />
           <Bar dataKey="currentYearSales" name="CY Sales" radius={[0, 4, 4, 0]}>

@@ -90,7 +90,7 @@ const KpiCardSkeleton: React.FC = () => {
     <div className={styles.skeletonCard}>
       <SkeletonItem size={12} style={{ width: '80px' }} />
       <SkeletonItem size={28} style={{ width: '110px' }} />
-      <SkeletonItem size={10} style={{ width: '40px' }} />
+      <SkeletonItem size={8} style={{ width: '40px' }} />
     </div>
   );
 };

@@ -71,7 +71,10 @@ const useStyles = makeStyles({
 
   /* Filled pill — shown when a non-ALL value is selected */
   pillFilled: {
-    borderColor: tokens.colorBrandStroke1,
+    borderTopColor: tokens.colorBrandStroke1,
+    borderRightColor: tokens.colorBrandStroke1,
+    borderBottomColor: tokens.colorBrandStroke1,
+    borderLeftColor: tokens.colorBrandStroke1,
     backgroundColor: tokens.colorBrandBackground2,
   },
 

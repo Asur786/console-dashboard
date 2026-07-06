@@ -24,7 +24,7 @@ const SalesTrendChart: React.FC<SalesTrendChartProps> = ({ data, timeframe }) =>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
         <XAxis dataKey="period" tick={{ fontSize: 12 }} />
         <YAxis tickFormatter={fmtY} tick={{ fontSize: 11 }} width={62} />
-        <Tooltip formatter={(v: number) => [fmtY(v), '']} />
+        <Tooltip formatter={(v) => [fmtY(Number(v)), '']} />
         <Legend />
         <Line
           type="monotone"

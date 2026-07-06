@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { Text, Button, makeStyles, tokens } from '@fluentui/react-components';
 
 const useStyles = makeStyles({
@@ -32,7 +31,7 @@ const NotFoundPage: React.FC = () => {
       <Text size={400}>
         The page you're looking for doesn't exist or has been moved.
       </Text>
-      <Button as={Link as React.ElementType} to="/" appearance="primary">
+      <Button as="a" onClick={() => window.location.href = '/'} appearance="primary">
         Go to Home
       </Button>
     </div>

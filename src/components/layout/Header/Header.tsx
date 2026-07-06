@@ -1,5 +1,5 @@
 import React from 'react';
-import { makeStyles, tokens, Text } from '@fluentui/react-components';
+import { makeStyles, Text } from '@fluentui/react-components';
 import { AlertRegular, GlobeRegular, PersonCircleRegular } from '@fluentui/react-icons';
 
 const useStyles = makeStyles({
