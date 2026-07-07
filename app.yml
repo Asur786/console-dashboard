@@ -8,9 +8,10 @@ command:
   - "--port"
   - "8000"
 
+# DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET are
+# automatically injected by the Databricks Apps runtime — no manual setup needed.
+# Only set the values that are NOT auto-provided:
 env:
-  - name: DATABRICKS_HOST
-    value: "dbc-3f565192-3b90.cloud.databricks.com"
   - name: DATABRICKS_WAREHOUSE_ID
     value: "9d64e46048ba1b6e"
   - name: DATABRICKS_CATALOG

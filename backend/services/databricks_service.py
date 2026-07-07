@@ -22,6 +22,44 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# =========================================================================== #
+#  OAuth token cache (avoids re-fetching on every query within the process)   #
+# =========================================================================== #
+
+import time as _time
+
+_oauth_cache: dict[str, Any] = {}   # {"token": str, "expires_at": float}
+
+
+def _get_oauth_token() -> str:
+    """
+    Exchange DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET for an
+    OAuth access token using the Databricks OIDC endpoint.
+    Token is cached in-process until 60 seconds before expiry.
+    """
+    now = _time.time()
+    if _oauth_cache.get("token") and _oauth_cache.get("expires_at", 0) - 60 > now:
+        return _oauth_cache["token"]  # type: ignore[return-value]
+
+    import requests as _req
+    host   = settings.DATABRICKS_HOST
+    c_id   = settings.DATABRICKS_CLIENT_ID
+    c_sec  = settings.DATABRICKS_CLIENT_SECRET
+
+    resp = _req.post(
+        f"https://{host}/oidc/v1/token",
+        data={"grant_type": "client_credentials", "scope": "all-apis"},
+        auth=(c_id, c_sec),
+        timeout=30,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+
+    _oauth_cache["token"]      = payload["access_token"]
+    _oauth_cache["expires_at"] = now + int(payload.get("expires_in", 3600))
+    logger.info("OAuth M2M token acquired (expires_in=%ss)", payload.get("expires_in"))
+    return _oauth_cache["token"]  # type: ignore[return-value]
+
 
 # =========================================================================== #
 #  Connection & query execution                                                #
@@ -29,20 +67,30 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def _connection() -> Generator[Any, None, None]:
-    """Opens and closes a Databricks SQL connection."""
+    """Opens and closes a Databricks SQL connection.
+
+    Auth priority:
+      1. DATABRICKS_TOKEN  (personal access token — local dev / explicit config)
+      2. DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET  (OAuth M2M —
+         auto-injected by Databricks Apps for the service principal)
+    """
     if not settings.is_databricks_configured:
         raise RuntimeError(
             "Databricks is not configured. "
-            "Set DATABRICKS_HOST, DATABRICKS_TOKEN, and DATABRICKS_WAREHOUSE_ID "
+            "Set DATABRICKS_HOST, DATABRICKS_WAREHOUSE_ID, and either "
+            "DATABRICKS_TOKEN or (DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET) "
             "in the Databricks Apps environment variables."
         )
 
     from databricks import sql as dbsql  # lazy import
 
+    # Resolve auth token
+    access_token = settings.DATABRICKS_TOKEN or _get_oauth_token()
+
     conn = dbsql.connect(
         server_hostname=settings.DATABRICKS_HOST,
         http_path=f"/sql/1.0/warehouses/{settings.DATABRICKS_WAREHOUSE_ID}",
-        access_token=settings.DATABRICKS_TOKEN,
+        access_token=access_token,
         catalog=settings.DATABRICKS_CATALOG,
         schema=settings.DATABRICKS_SCHEMA,
     )

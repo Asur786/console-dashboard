@@ -32,6 +32,15 @@ class Settings:
     def DATABRICKS_TOKEN(self) -> str:
         return os.getenv("DATABRICKS_TOKEN", "")
 
+    # OAuth M2M — auto-injected by Databricks Apps for the service principal
+    @property
+    def DATABRICKS_CLIENT_ID(self) -> str:
+        return os.getenv("DATABRICKS_CLIENT_ID", "")
+
+    @property
+    def DATABRICKS_CLIENT_SECRET(self) -> str:
+        return os.getenv("DATABRICKS_CLIENT_SECRET", "")
+
     @property
     def DATABRICKS_WAREHOUSE_ID(self) -> str:
         return os.getenv("DATABRICKS_WAREHOUSE_ID", "")
@@ -52,11 +61,10 @@ class Settings:
 
     @property
     def is_databricks_configured(self) -> bool:
-        return bool(
-            self.DATABRICKS_HOST
-            and self.DATABRICKS_TOKEN
-            and self.DATABRICKS_WAREHOUSE_ID
-        )
+        has_host      = bool(self.DATABRICKS_HOST and self.DATABRICKS_WAREHOUSE_ID)
+        has_token     = bool(self.DATABRICKS_TOKEN)
+        has_oauth     = bool(self.DATABRICKS_CLIENT_ID and self.DATABRICKS_CLIENT_SECRET)
+        return has_host and (has_token or has_oauth)
 
 
 settings = Settings()
