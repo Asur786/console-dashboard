@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 @contextmanager
 def _connection() -> Generator[Any, None, None]:
     """Opens and closes a Databricks SQL connection."""
+    if not settings.is_databricks_configured:
+        raise RuntimeError(
+            "Databricks is not configured. "
+            "Set DATABRICKS_HOST, DATABRICKS_TOKEN, and DATABRICKS_WAREHOUSE_ID "
+            "in the Databricks Apps environment variables."
+        )
+
     from databricks import sql as dbsql  # lazy import
 
     conn = dbsql.connect(

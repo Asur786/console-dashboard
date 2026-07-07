@@ -54,7 +54,9 @@ function buildQueryString(filters: KpiFilters): string {
 export const kpiService = {
   async getPerformanceSummary(filters: KpiFilters): Promise<PerformanceSummary> {
     const url = `/api/kpis${buildQueryString(filters)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(20_000),
+    });
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');

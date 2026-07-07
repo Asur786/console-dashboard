@@ -26,7 +26,9 @@ let cached: ApiFiltersResponse | null = null;
 async function fetchAll(): Promise<ApiFiltersResponse> {
   if (cached) return cached;
 
-  const response = await fetch('/api/filters');
+  const response = await fetch('/api/filters', {
+    signal: AbortSignal.timeout(20_000),
+  });
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
