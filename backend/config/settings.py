@@ -59,6 +59,15 @@ class Settings:
         "CORS_ORIGINS", "http://localhost:5173"
     ).split(",")
 
+    # --- Genie Space ---
+    @property
+    def GENIE_SPACE_ID(self) -> str:
+        return os.getenv("GENIE_SPACE_ID", "")
+
+    @property
+    def is_genie_configured(self) -> bool:
+        return bool(self.GENIE_SPACE_ID and self.DATABRICKS_HOST)
+
     @property
     def is_databricks_configured(self) -> bool:
         has_host      = bool(self.DATABRICKS_HOST and self.DATABRICKS_WAREHOUSE_ID)

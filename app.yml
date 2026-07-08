@@ -18,3 +18,5 @@ env:
     value: "workspace"
   - name: DATABRICKS_SCHEMA
     value: "default"
+  - name: GENIE_SPACE_ID
+    value: "01f17ab1d5eb13ef8f24284dcfaee58b"

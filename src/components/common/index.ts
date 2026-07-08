@@ -9,3 +9,4 @@ export { FilterDropdown } from './FilterDropdown';
 export type { FilterDropdownOption } from './FilterDropdown';
 export { FilterBar } from './FilterBar';
 export { DashboardHeader } from './DashboardHeader';
+export { InsightSummary } from './InsightSummary';

@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse
 from config.settings import settings
 from routes.filters import router as filters_router
 from routes.kpis import router as kpis_router
+from routes.insights import router as insights_router
 
 app = FastAPI(
     title="Console Dashboard API",
@@ -47,6 +48,7 @@ app.add_middleware(
 # --- API Routes ---
 app.include_router(filters_router, prefix="/api", tags=["filters"])
 app.include_router(kpis_router, prefix="/api", tags=["kpis"])
+app.include_router(insights_router, prefix="/api", tags=["insights"])
 
 
 @app.get("/api/health")

@@ -7,6 +7,7 @@ import {
   KPIGrid,
   KPICard,
   ErrorBanner,
+  InsightSummary,
 } from '../../components';
 import { useFilters } from '../../hooks/useFilters';
 import { kpiService } from '../../services/kpi.service';
@@ -182,6 +183,9 @@ const ExecutiveSummaryPage: React.FC = () => {
           />
         ))}
       </KPIGrid>
+
+      {/* AI Insight Summary — passes current filters so the prompt is context-aware */}
+      <InsightSummary filters={filters} />
     </div>
   );
 };

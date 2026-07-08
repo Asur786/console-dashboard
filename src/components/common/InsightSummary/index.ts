@@ -1,0 +1,1 @@
+export { InsightSummary } from './InsightSummary';
