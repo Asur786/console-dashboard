@@ -145,27 +145,34 @@ def build_prompt(
     # --- KPI values block (injected from dashboard) ---
     if kpi_values:
         kpi_lines = "\n".join(
-            f"- {kpi.label} = {kpi.value}" for kpi in kpi_values
+            f"  {kpi.label}: {kpi.value}" for kpi in kpi_values
         )
 
-        # Place KPI values BEFORE the main template so Genie sees them first
-        sections.insert(0,
-            "IMPORTANT: The following KPI values are the ONLY values you should "
-            "reference in your response. These are the exact values currently "
-            "displayed on the dashboard. Do NOT query gold_kpi_summary. "
-            "Do NOT run any SQL to look up KPI metrics. "
-            "Use ONLY the values listed below.\n\n"
-            f"Dashboard KPI Values:\n{kpi_lines}"
-        )
+        # Build filter context string for the KPI block
+        if filters.has_any_filter:
+            active = filters.active_filters()
+            filter_summary = "\n".join(
+                f"  {label}: {value}" for label, value in active.items()
+            )
+        else:
+            filter_summary = "  All markets, channels, categories, and retailers"
 
-        # Only reference business context table — not gold_kpi_summary
-        sections.append(
-            "For KPI definitions, thresholds, and recommendation templates, "
-            "use gold_business_context from this Genie Space. "
-            "Join on kpi_name. "
-            "Do NOT query gold_kpi_summary — the KPI values above are "
-            "already provided and must be used as-is."
-        )
+        # Insert authoritative KPI + context block at position 0 (before template)
+        sections.insert(0, (
+            "Selected Filters:\n"
+            "  Time Frame: R12M\n"
+            f"{filter_summary}\n\n"
+            "Current KPI Values (source of truth — from the dashboard):\n"
+            f"{kpi_lines}\n\n"
+            "The KPI values provided above are the authoritative values.\n\n"
+            "Do not query or recalculate KPI metrics from gold_kpi_summary.\n\n"
+            "Use gold_kpi_summary only to understand contextual attributes "
+            "such as time_frame, country, category, retailer, channel, brand, "
+            "segment, and trend indicators if additional business context "
+            "is required.\n\n"
+            "Use gold_business_context for KPI definitions, thresholds, "
+            "and recommendations."
+        ))
     else:
         # No KPI values provided — fall back to Genie querying the gold tables
         sections.append(_DATA_SOURCE_INSTRUCTION_NO_KPI_VALUES)
