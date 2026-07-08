@@ -11,9 +11,11 @@ import {
 } from '../../components';
 import { useFilters } from '../../hooks/useFilters';
 import { kpiService } from '../../services/kpi.service';
+import { insightService } from '../../services/insight.service';
 import type { ExecFilters } from '../../types/executive.types';
 import type { DashboardFilterOptions } from '../../types/filter.types';
 import type { KpiResult } from '../../types/kpi.types';
+import type { InsightResponse } from '../../types/insight.types';
 
 /* ------------------------------------------------------------------ */
 /*  Styles — page-level layout only                                   */
@@ -85,47 +87,79 @@ const ExecutiveSummaryPage: React.FC = () => {
   // Filter options loaded from FilterService (schema-driven)
   const { filterOptions, filterOptionsLoading } = useFilters();
 
-  const [filters, setFilters]       = useState<ExecFilters>(DEFAULT_FILTERS);
-  const [kpis, setKpis]             = useState<KpiResult[]>([]);
-  const [kpiLoading, setKpiLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(formatTimestamp());
-  const [error, setError]           = useState<string | null>(null);
+  const [filters, setFilters]           = useState<ExecFilters>(DEFAULT_FILTERS);
+  const [kpis, setKpis]                 = useState<KpiResult[]>([]);
+  const [kpiLoading, setKpiLoading]     = useState(true);
+  const [lastUpdated, setLastUpdated]   = useState(formatTimestamp());
+  const [error, setError]               = useState<string | null>(null);
 
-  // ----- fetch helper (reused by mount, apply, reset) -----
-  const fetchKpis = useCallback(async (f: ExecFilters) => {
+  // Insight state — managed here, passed to InsightSummary as props
+  const [insight, setInsight]           = useState<InsightResponse | null>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
+  const [insightError, setInsightError] = useState<string | null>(null);
+
+  /**
+   * Fetch KPIs then immediately auto-generate AI insights with those values.
+   * Sequential: insights depend on KPI values so they run after KPIs succeed.
+   * Phase 1 (KPIs) sets its own loading/error; Phase 2 (insights) is independent.
+   */
+  const fetchAll = useCallback(async (f: ExecFilters) => {
+    // ── Phase 1: KPIs ──────────────────────────────────────────────
     setKpiLoading(true);
     setError(null);
+
+    let fetchedKpis: KpiResult[] = [];
+
     try {
       const result = await kpiService.getPerformanceSummary(f);
+      fetchedKpis = result.kpis;
       setKpis(result.kpis);
       setLastUpdated(formatTimestamp());
     } catch (err: unknown) {
-      // If the first attempt timed out (cold warehouse start), retry once silently
-      // before surfacing the error to the user.
       const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
       if (isTimeout) {
         try {
           const result = await kpiService.getPerformanceSummary(f);
+          fetchedKpis = result.kpis;
           setKpis(result.kpis);
           setLastUpdated(formatTimestamp());
-          return; // retry succeeded — no error shown
-        } catch {
-          // retry also failed — fall through to show error
+        } catch (retryErr: unknown) {
+          const msg = retryErr instanceof Error ? retryErr.message : 'Failed to load KPIs.';
+          setError(msg);
         }
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to load KPIs.';
+        setError(msg);
       }
-      const msg =
-        err instanceof Error ? err.message : 'An unexpected error occurred.';
-      setError(msg);
-      // Previous KPIs are preserved — we do NOT clear setKpis
     } finally {
-      setKpiLoading(false);
+      setKpiLoading(false); // KPI cards rendered — move on to insights
+    }
+
+    // ── Phase 2: AI Insights (auto, using fresh KPI values) ────────
+    setInsightLoading(true);
+    setInsightError(null);
+
+    if (fetchedKpis.length === 0) {
+      // No KPIs to work with — skip insight call
+      setInsightLoading(false);
+      return;
+    }
+
+    try {
+      const result = await insightService.generateInsight(f, fetchedKpis);
+      setInsight(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate insights.';
+      setInsightError(msg);
+    } finally {
+      setInsightLoading(false);
     }
   }, []);
 
-  // Fetch KPIs on mount with default filters
+  // Auto-load KPIs + insights on mount
   useEffect(() => {
-    fetchKpis(DEFAULT_FILTERS);
-  }, [fetchKpis]);
+    fetchAll(DEFAULT_FILTERS);
+  }, [fetchAll]);
 
   const handleFilterChange = useCallback(
     (key: keyof ExecFilters, value: string) => {
@@ -135,16 +169,16 @@ const ExecutiveSummaryPage: React.FC = () => {
   );
 
   const handleApply = useCallback(() => {
-    fetchKpis(filters);
-  }, [filters, fetchKpis]);
+    fetchAll(filters);
+  }, [filters, fetchAll]);
 
   const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
-    fetchKpis(DEFAULT_FILTERS);
-  }, [fetchKpis]);
+    fetchAll(DEFAULT_FILTERS);
+  }, [fetchAll]);
 
   const handleDismissError = useCallback(() => setError(null), []);
-  const handleRetry        = useCallback(() => fetchKpis(filters), [filters, fetchKpis]);
+  const handleRetry        = useCallback(() => fetchAll(filters), [filters, fetchAll]);
 
   return (
     <div className={styles.page}>
@@ -197,8 +231,12 @@ const ExecutiveSummaryPage: React.FC = () => {
         ))}
       </KPIGrid>
 
-      {/* AI Insight Summary — passes current filters and KPI values so Genie uses exact dashboard numbers */}
-      <InsightSummary filters={filters} kpis={kpis} />
+      {/* AI Insight Summary — auto-loaded; pure presentational */}
+      <InsightSummary
+        loading={insightLoading}
+        insight={insight}
+        error={insightError}
+      />
     </div>
   );
 };
