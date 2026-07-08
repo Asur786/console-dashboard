@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 import { AppLayout } from './components/layout';
-import { ExecutiveSummaryPage, DashboardPage, NotFoundPage } from './pages';
+import { ExecutiveSummaryPage, NotFoundPage } from './pages';
 
 function App() {
   return (
@@ -10,7 +10,6 @@ function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<ExecutiveSummaryPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

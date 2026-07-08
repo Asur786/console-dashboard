@@ -184,7 +184,6 @@ export const InsightSummary: React.FC<InsightSummaryProps> = ({
       <div className={styles.header}>
         <BrainCircuit20Regular className={styles.headerIcon} />
         <Text className={styles.headerTitle}>AI Insight Summary</Text>
-        <Text className={styles.badge}>Powered by Databricks Genie</Text>
       </div>
       {renderContent()}
     </div>
