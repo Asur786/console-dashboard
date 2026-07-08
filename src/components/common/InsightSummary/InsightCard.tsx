@@ -65,15 +65,25 @@ const useStyles = makeStyles({
 });
 
 /** Preprocess Genie text: convert inline numbered lists like
- *  "intro: (1) item one; (2) item two" into separate bullet lines.
+ *  "intro: (1) item one; (2) item two; and (3) item three"
+ *  into separate bullet lines.
  */
 function preprocessText(text: string): string {
   if (!/\(\d+\)/.test(text)) return text;
 
   return text
-    .replace(/:\s*\(1\)\s+/g, ':\n\u2022 ')    // "intro: (1) x" → "intro:\n• x"
-    .replace(/^\(1\)\s+/gm,   '\u2022 ')          // "(1) at line start → "• x"
-    .replace(/;\s*\(\d+\)\s+/g, '\n\u2022 ');     // "; (N) x" → "\n• x"
+    // "intro: (1) x" → "intro:\n• x"
+    .replace(/:\s*\(1\)\s+/g, ':\n\u2022 ')
+    // "(1) x" at line start → "• x"
+    .replace(/^\(1\)\s+/gm, '\u2022 ')
+    // "; (N) x"       → "\n• x"
+    .replace(/;\s*\((\d+)\)\s+/g, '\n\u2022 ')
+    // "; and (N) x"   → "\n• x"
+    .replace(/;\s*and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
+    // ", and (N) x"   → "\n• x"
+    .replace(/,\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
+    // " and (N) x" (no semicolon/comma) → "\n• x"
+    .replace(/\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ');
 }
 
 /** Convert **bold**, *italic*, line breaks, and - bullets to React nodes. */
