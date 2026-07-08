@@ -204,6 +204,22 @@ class GenieService:
         raw_text = await self._poll_for_result(conversation_id, message_id)
 
         # 3. Extract sections
+        if not raw_text:
+            # Genie ran SQL but returned no narrative text.
+            # Surface a useful message rather than blank sections.
+            no_text_msg = (
+                "Genie executed the query successfully but returned data results "
+                "rather than a narrative summary. "
+                "Try rephrasing as a direct business question, e.g. "
+                "'What is the overall KPI performance and what actions should I take?'"
+            )
+            return GenieResponse(
+                executive_summary=no_text_msg,
+                root_cause="",
+                recommendation="",
+                raw_response="[No text response — Genie returned query/table results only]",
+            )
+
         sections = _extract_sections(raw_text)
 
         response = GenieResponse(
@@ -329,36 +345,36 @@ class GenieService:
         """
         Extract the human-readable text from a completed Genie message response.
 
-        Genie responses can contain multiple attachments:
-          - type=TEXT → plain text narrative
-          - type=QUERY → SQL Genie generated
-          - type=QUERY_RESULT → tabular result set
+        Genie responses contain attachments. A text narrative attachment has a
+        'text' key (with a 'content' sub-key). SQL query attachments have a
+        'query' key. We collect all text narratives.
 
-        We concatenate all TEXT attachments into a single string.
-        If no TEXT attachment is found, we fall back to any available content.
+        Important: message_data['content'] is the USER's message (our prompt),
+        NOT Genie's reply — we must never return that as the insight.
         """
-        attachments = message_data.get("attachments", [])
+        attachments = message_data.get("attachments") or []
 
-        # Collect TEXT-type attachments
         text_parts: list[str] = []
         for att in attachments:
-            att_type = att.get("type", "")
-            if att_type == "TEXT":
-                content = att.get("text", {}).get("content", "")
+            # Detect text attachment by presence of 'text' key (not by type field,
+            # which is not consistently present in the Genie API response)
+            text_obj = att.get("text")
+            if isinstance(text_obj, dict):
+                content = text_obj.get("content", "")
                 if content:
                     text_parts.append(content)
 
         if text_parts:
             return "\n\n".join(text_parts)
 
-        # Fallback: check for any content field at message level
-        top_level_content = message_data.get("content", "")
-        if top_level_content:
-            return top_level_content
-
-        # Last resort: return the raw attachments as a debug string
-        logger.warning("No TEXT attachments found in Genie response. Returning raw.")
-        return str(attachments)
+        # Genie executed SQL but returned no narrative text attachment.
+        # Log the structure so we can debug in Databricks App logs.
+        logger.warning(
+            "Genie COMPLETED but returned no text attachment. "
+            "Attachment types received: %s",
+            [list(att.keys()) for att in attachments],
+        )
+        return ""
 
 
 # Module-level singleton
