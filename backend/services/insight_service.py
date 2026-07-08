@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from services.prompt_store import get_prompt, PromptDefinition
-from services.prompt_builder import FilterContext, build_prompt
+from services.prompt_builder import FilterContext, KpiSnapshot, build_prompt
 from services.genie_service import genie_service, GenieResponse
 
 logger = logging.getLogger(__name__)
@@ -50,17 +50,21 @@ class InsightService:
         channel:   Optional[str] = None,
         category:  Optional[str] = None,
         retailer:  Optional[str] = None,
+        kpi_values: Optional[list[KpiSnapshot]] = None,
     ) -> "InsightResult":
         """
-        Build a prompt from the store + filters, send it to Genie,
+        Build a prompt from the store + filters + KPI values, send it to Genie,
         and return the structured insight.
 
         Args:
-            prompt_id: One of the PROMPT_* constants from prompt_store.py.
-            country:   Dashboard Country filter value (or None / 'ALL').
-            channel:   Dashboard Channel filter value (or None / 'ALL').
-            category:  Dashboard Category filter value (or None / 'ALL').
-            retailer:  Dashboard Retailer filter value (or None / 'ALL').
+            prompt_id:  One of the PROMPT_* constants from prompt_store.py.
+            country:    Dashboard Country filter value (or None / 'ALL').
+            channel:    Dashboard Channel filter value (or None / 'ALL').
+            category:   Dashboard Category filter value (or None / 'ALL').
+            retailer:   Dashboard Retailer filter value (or None / 'ALL').
+            kpi_values: Optional KPI snapshots from the dashboard. When provided,
+                        the exact values are injected into the prompt so Genie
+                        interprets them instead of recalculating.
 
         Returns:
             InsightResult with structured sections and metadata.
@@ -74,9 +78,10 @@ class InsightService:
         prompt_def: PromptDefinition = get_prompt(prompt_id)
 
         logger.info(
-            "Generating insight | prompt_id=%s | filters: "
+            "Generating insight | prompt_id=%s | kpi_values=%d | filters: "
             "country=%s channel=%s category=%s retailer=%s",
-            prompt_id, country, channel, category, retailer,
+            prompt_id, len(kpi_values) if kpi_values else 0,
+            country, channel, category, retailer,
         )
 
         # 2. Build filter context
@@ -87,10 +92,11 @@ class InsightService:
             retailer=retailer,
         )
 
-        # 3. Assemble the final prompt
+        # 3. Assemble the final prompt (with injected KPI values if provided)
         final_prompt = build_prompt(
             base_template=prompt_def.template,
             filters=filters,
+            kpi_values=kpi_values,
         )
 
         logger.debug("Assembled prompt (%d chars)", len(final_prompt))

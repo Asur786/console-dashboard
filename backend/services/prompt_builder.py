@@ -76,6 +76,14 @@ class FilterContext:
 # =========================================================================== #
 
 _DATA_SOURCE_INSTRUCTION = (
+    "Use gold_business_context from this Genie Space to look up KPI definitions, "
+    "thresholds (positive_threshold, negative_threshold), and recommendation "
+    "templates (recommendation_if_positive, recommendation_if_negative, "
+    "genie_guidance) for each KPI mentioned above.\n"
+    "Join on kpi_name."
+)
+
+_DATA_SOURCE_INSTRUCTION_NO_KPI_VALUES = (
     "Query the Gold Layer tables in this Genie Space:\n"
     "  - gold_kpi_summary: pre-aggregated KPI metrics "
     "(current_year_value, previous_year_value, yoy_growth_pct, "
@@ -88,36 +96,34 @@ _DATA_SOURCE_INSTRUCTION = (
 )
 
 
-def build_prompt(base_template: str, filters: FilterContext) -> str:
-    """
-    Assemble the final prompt string from a base template and filter context.
+@dataclass(frozen=True)
+class KpiSnapshot:
+    """A single KPI value from the dashboard, injected into the prompt."""
+    label: str
+    value: str
+    sublabel: str = ""
 
-    The output has three sections:
-      1. The base prompt template (the 'what to generate' instruction).
-      2. An active-filter block (the 'scope' of the analysis) — only included
-         if at least one non-ALL filter is active.
-      3. A data source instruction (the 'where to look' directive).
+
+def build_prompt(
+    base_template: str,
+    filters: FilterContext,
+    kpi_values: list[KpiSnapshot] | None = None,
+) -> str:
+    """
+    Assemble the final prompt string from a base template, filter context,
+    and optionally the exact KPI values currently shown on the dashboard.
+
+    When kpi_values are provided, the prompt tells Genie to interpret those
+    exact numbers rather than recalculating from the gold tables. This ensures
+    the AI narrative matches the dashboard KPI cards exactly.
 
     Args:
         base_template: The prompt body from PromptStore (prompt.template).
         filters:       The active dashboard filters for this request.
+        kpi_values:    Optional list of KPI snapshots from the dashboard.
 
     Returns:
         A complete, ready-to-send prompt string.
-
-    Example output (PROMPT_FULL_INSIGHT, Country=FRANCE, Channel=MODERN):
-
-        Generate a complete business performance insight with three sections:
-        ...
-
-        Filters applied to this analysis:
-        - Country = FRANCE
-        - Channel = MODERN
-
-        Query the Gold Layer tables in this Genie Space:
-          - gold_kpi_summary: ...
-          - gold_business_context: ...
-        Join the two tables on kpi_name.
     """
     sections: list[str] = [base_template.strip()]
 
@@ -136,7 +142,23 @@ def build_prompt(base_template: str, filters: FilterContext) -> str:
             "channels, categories, and retailers."
         )
 
-    # --- Data source instruction ---
-    sections.append(_DATA_SOURCE_INSTRUCTION)
+    # --- KPI values block (injected from dashboard) ---
+    if kpi_values:
+        kpi_lines = "\n".join(
+            f"- {kpi.label} = {kpi.value}" for kpi in kpi_values
+        )
+        sections.append(
+            "Current KPI Values (from the dashboard — use these exact values, "
+            "do NOT recalculate or re-aggregate):\n"
+            f"{kpi_lines}\n\n"
+            "Generate your analysis using ONLY the KPI values listed above. "
+            "Do not query gold_kpi_summary for metric values. "
+            "The dashboard is the source of truth for these numbers."
+        )
+        # Only need business context table for definitions/thresholds
+        sections.append(_DATA_SOURCE_INSTRUCTION)
+    else:
+        # No KPI values provided — fall back to Genie querying the gold tables
+        sections.append(_DATA_SOURCE_INSTRUCTION_NO_KPI_VALUES)
 
     return "\n\n".join(sections)

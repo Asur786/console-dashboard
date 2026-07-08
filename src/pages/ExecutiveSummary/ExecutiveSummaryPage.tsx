@@ -197,8 +197,8 @@ const ExecutiveSummaryPage: React.FC = () => {
         ))}
       </KPIGrid>
 
-      {/* AI Insight Summary — passes current filters so the prompt is context-aware */}
-      <InsightSummary filters={filters} />
+      {/* AI Insight Summary — passes current filters and KPI values so Genie uses exact dashboard numbers */}
+      <InsightSummary filters={filters} kpis={kpis} />
     </div>
   );
 };

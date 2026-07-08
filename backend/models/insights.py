@@ -13,6 +13,14 @@ from pydantic import BaseModel, Field
 from services.prompt_store import list_prompt_ids
 
 
+class KpiValue(BaseModel):
+    """A single KPI value from the dashboard — injected into the prompt so
+    Genie interprets the exact same numbers the user sees."""
+    label: str = Field(description="KPI display name, e.g. 'Dollar Sales'")
+    value: str = Field(description="Formatted display value, e.g. '$2K'")
+    sublabel: str = Field(default="", description="Sub-label, e.g. 'GTM'")
+
+
 class InsightRequest(BaseModel):
     """
     Request body for POST /api/insights.
@@ -56,6 +64,15 @@ class InsightRequest(BaseModel):
         default=None,
         description="Dashboard Retailer filter (e.g. WALMART, TESCO, CARREFOUR).",
         examples=["WALMART"],
+    )
+    kpi_values: Optional[list[KpiValue]] = Field(
+        alias="kpiValues",
+        default=None,
+        description=(
+            "The exact KPI values currently displayed on the dashboard. "
+            "When provided, these are injected into the prompt so Genie "
+            "interprets the same numbers the user sees — no recalculation."
+        ),
     )
 
     model_config = {"populate_by_name": True}

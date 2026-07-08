@@ -17,6 +17,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from models.insights import InsightRequest, InsightResponse
 from services.insight_service import insight_service
+from services.prompt_builder import KpiSnapshot
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,12 +46,21 @@ async def insights_endpoint(body: InsightRequest) -> InsightResponse:
       Omit or pass 'ALL' for no filter on that dimension.
     """
     try:
+        # Convert Pydantic KpiValue models to KpiSnapshot dataclasses
+        kpi_snapshots = None
+        if body.kpi_values:
+            kpi_snapshots = [
+                KpiSnapshot(label=kv.label, value=kv.value, sublabel=kv.sublabel)
+                for kv in body.kpi_values
+            ]
+
         result = await insight_service.generate_insight(
             prompt_id=body.prompt_id,
             country=body.country,
             channel=body.channel,
             category=body.category,
             retailer=body.retailer,
+            kpi_values=kpi_snapshots,
         )
     except KeyError as exc:
         logger.warning("Invalid prompt_id requested: %s", body.prompt_id)

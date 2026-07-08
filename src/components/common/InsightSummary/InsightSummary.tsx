@@ -10,6 +10,7 @@ import {
 import { BrainCircuit20Regular, ArrowSyncCircle20Regular } from '@fluentui/react-icons';
 import type { ExecFilters } from '../../../types/executive.types';
 import type { InsightResponse } from '../../../types/insight.types';
+import type { KpiResult } from '../../../types/kpi.types';
 import { insightService } from '../../../services/insight.service';
 
 /* ------------------------------------------------------------------ */
@@ -149,6 +150,9 @@ const useStyles = makeStyles({
 interface InsightSummaryProps {
   /** Currently selected dashboard filters — passed from the page. */
   filters: ExecFilters;
+  /** Current KPI values displayed on the dashboard — injected into the prompt
+   *  so Genie interprets the exact same numbers the user sees. */
+  kpis: KpiResult[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -255,7 +259,7 @@ function renderInline(text: string, keyPrefix: number): React.ReactNode {
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
-export const InsightSummary: React.FC<InsightSummaryProps> = ({ filters }) => {
+export const InsightSummary: React.FC<InsightSummaryProps> = ({ filters, kpis }) => {
   const styles = useStyles();
 
   const [loading,  setLoading]  = useState(false);
@@ -267,7 +271,7 @@ export const InsightSummary: React.FC<InsightSummaryProps> = ({ filters }) => {
     setError(null);
 
     try {
-      const result = await insightService.generateInsight(filters);
+      const result = await insightService.generateInsight(filters, kpis);
       setInsight(result);
     } catch (err: unknown) {
       const msg =

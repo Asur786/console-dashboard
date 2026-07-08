@@ -12,6 +12,13 @@ export type PromptId =
   | 'PROMPT_RECOMMENDATION'
   | 'PROMPT_FULL_INSIGHT';
 
+/** A KPI value snapshot from the dashboard, injected into the prompt. */
+export interface KpiValueSnapshot {
+  label: string;
+  value: string;
+  sublabel: string;
+}
+
 /** Request body sent to POST /api/insights. */
 export interface InsightRequest {
   promptId: PromptId;
@@ -19,6 +26,7 @@ export interface InsightRequest {
   channel?: string;
   category?: string;
   retailer?: string;
+  kpiValues?: KpiValueSnapshot[];
 }
 
 /** Response from POST /api/insights. */
