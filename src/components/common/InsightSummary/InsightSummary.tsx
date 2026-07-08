@@ -160,6 +160,98 @@ const SECTIONS: { key: keyof Pick<InsightResponse, 'executiveSummary' | 'rootCau
   { key: 'recommendation',   label: 'Business Recommendation' },
 ];
 
+/**
+ * Lightweight markdown-to-React converter.
+ * Handles: **bold**, *italic*, line breaks, and bullet lists.
+ * No external dependency — keeps the bundle lean for the POC.
+ */
+function renderMarkdown(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // Split into lines for bullet/paragraph handling
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+
+  lines.forEach((line, lineIdx) => {
+    const trimmed = line.trim();
+
+    // Skip empty lines but preserve spacing
+    if (!trimmed) {
+      elements.push(<br key={`br-${lineIdx}`} />);
+      return;
+    }
+
+    // Bullet point
+    const isBullet = /^[-•]\s/.test(trimmed);
+    const content = isBullet ? trimmed.replace(/^[-•]\s/, '') : trimmed;
+
+    // Convert **bold** and *italic* inline
+    const inlineElements = renderInline(content, lineIdx);
+
+    if (isBullet) {
+      elements.push(
+        <div key={`line-${lineIdx}`} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+          <span style={{ flexShrink: 0 }}>•</span>
+          <span>{inlineElements}</span>
+        </div>
+      );
+    } else {
+      elements.push(
+        <span key={`line-${lineIdx}`}>
+          {inlineElements}
+          {lineIdx < lines.length - 1 && <br />}
+        </span>
+      );
+    }
+  });
+
+  return <>{elements}</>;
+}
+
+/** Convert **bold** and *italic* markers to <strong> and <em> elements. */
+function renderInline(text: string, keyPrefix: number): React.ReactNode {
+  // Regex: **bold** or *italic* (non-greedy, handles nested)
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let partIdx = 0;
+
+  while (remaining.length > 0) {
+    // Find first **bold** match
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+    // Find first *italic* match (but not **)
+    const italicMatch = remaining.match(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/);
+
+    // Determine which comes first
+    const boldIdx = boldMatch ? remaining.indexOf(boldMatch[0]) : -1;
+    const italicIdx = italicMatch ? remaining.indexOf(italicMatch[0]) : -1;
+
+    if (boldIdx === -1 && italicIdx === -1) {
+      // No more formatting — push remaining text
+      parts.push(<React.Fragment key={`${keyPrefix}-${partIdx}`}>{remaining}</React.Fragment>);
+      break;
+    }
+
+    // Process whichever comes first
+    if (boldIdx !== -1 && (italicIdx === -1 || boldIdx <= italicIdx)) {
+      // Text before bold
+      if (boldIdx > 0) {
+        parts.push(<React.Fragment key={`${keyPrefix}-${partIdx++}`}>{remaining.substring(0, boldIdx)}</React.Fragment>);
+      }
+      parts.push(<strong key={`${keyPrefix}-${partIdx++}`}>{boldMatch![1]}</strong>);
+      remaining = remaining.substring(boldIdx + boldMatch![0].length);
+    } else {
+      // Text before italic
+      if (italicIdx > 0) {
+        parts.push(<React.Fragment key={`${keyPrefix}-${partIdx++}`}>{remaining.substring(0, italicIdx)}</React.Fragment>);
+      }
+      parts.push(<em key={`${keyPrefix}-${partIdx++}`}>{italicMatch![1]}</em>);
+      remaining = remaining.substring(italicIdx + italicMatch![0].length);
+    }
+  }
+
+  return <>{parts}</>;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -229,14 +321,16 @@ export const InsightSummary: React.FC<InsightSummaryProps> = ({ filters }) => {
             {index > 0 && <div className={styles.sectionDivider} />}
             <div className={styles.section}>
               <Text className={styles.sectionLabel}>{section.label}</Text>
-              <Text
+              <div
                 className={mergeClasses(
                   styles.sectionText,
                   !insight[section.key] && styles.emptySection,
                 )}
               >
-                {insight[section.key] || 'No content available for this section.'}
-              </Text>
+                {insight[section.key]
+                  ? renderMarkdown(insight[section.key])
+                  : 'No content available for this section.'}
+              </div>
             </div>
           </React.Fragment>
         ))}
