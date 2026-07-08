@@ -100,6 +100,19 @@ const ExecutiveSummaryPage: React.FC = () => {
       setKpis(result.kpis);
       setLastUpdated(formatTimestamp());
     } catch (err: unknown) {
+      // If the first attempt timed out (cold warehouse start), retry once silently
+      // before surfacing the error to the user.
+      const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
+      if (isTimeout) {
+        try {
+          const result = await kpiService.getPerformanceSummary(f);
+          setKpis(result.kpis);
+          setLastUpdated(formatTimestamp());
+          return; // retry succeeded — no error shown
+        } catch {
+          // retry also failed — fall through to show error
+        }
+      }
       const msg =
         err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(msg);

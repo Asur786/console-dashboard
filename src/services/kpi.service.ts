@@ -55,7 +55,7 @@ export const kpiService = {
   async getPerformanceSummary(filters: KpiFilters): Promise<PerformanceSummary> {
     const url = `/api/kpis${buildQueryString(filters)}`;
     const response = await fetch(url, {
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(60_000), // 60s — allows SQL Warehouse cold-start (typically 30-50s)
     });
 
     if (!response.ok) {
