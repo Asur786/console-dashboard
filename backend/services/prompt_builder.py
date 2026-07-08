@@ -147,16 +147,25 @@ def build_prompt(
         kpi_lines = "\n".join(
             f"- {kpi.label} = {kpi.value}" for kpi in kpi_values
         )
-        sections.append(
-            "Current KPI Values (from the dashboard — use these exact values, "
-            "do NOT recalculate or re-aggregate):\n"
-            f"{kpi_lines}\n\n"
-            "Generate your analysis using ONLY the KPI values listed above. "
-            "Do not query gold_kpi_summary for metric values. "
-            "The dashboard is the source of truth for these numbers."
+
+        # Place KPI values BEFORE the main template so Genie sees them first
+        sections.insert(0,
+            "IMPORTANT: The following KPI values are the ONLY values you should "
+            "reference in your response. These are the exact values currently "
+            "displayed on the dashboard. Do NOT query gold_kpi_summary. "
+            "Do NOT run any SQL to look up KPI metrics. "
+            "Use ONLY the values listed below.\n\n"
+            f"Dashboard KPI Values:\n{kpi_lines}"
         )
-        # Only need business context table for definitions/thresholds
-        sections.append(_DATA_SOURCE_INSTRUCTION)
+
+        # Only reference business context table — not gold_kpi_summary
+        sections.append(
+            "For KPI definitions, thresholds, and recommendation templates, "
+            "use gold_business_context from this Genie Space. "
+            "Join on kpi_name. "
+            "Do NOT query gold_kpi_summary — the KPI values above are "
+            "already provided and must be used as-is."
+        )
     else:
         # No KPI values provided — fall back to Genie querying the gold tables
         sections.append(_DATA_SOURCE_INSTRUCTION_NO_KPI_VALUES)

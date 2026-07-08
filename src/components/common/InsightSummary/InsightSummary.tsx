@@ -282,7 +282,7 @@ export const InsightSummary: React.FC<InsightSummaryProps> = ({ filters, kpis })
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, kpis]);
 
   /* ---- Render body content ---------------------------------------- */
   const renderBody = () => {
