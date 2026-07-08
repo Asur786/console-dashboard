@@ -26,19 +26,40 @@ let cached: ApiFiltersResponse | null = null;
 async function fetchAll(): Promise<ApiFiltersResponse> {
   if (cached) return cached;
 
-  const response = await fetch('/api/filters', {
-    signal: AbortSignal.timeout(20_000),
-  });
+  // First attempt — 60s timeout to handle SQL Warehouse cold start
+  try {
+    const response = await fetch('/api/filters', {
+      signal: AbortSignal.timeout(60_000),
+    });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(
-      `Filters request failed (${response.status}): ${text || response.statusText}`
-    );
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(
+        `Filters request failed (${response.status}): ${text || response.statusText}`
+      );
+    }
+
+    cached = await response.json();
+    return cached!;
+  } catch (err) {
+    // Auto-retry once on timeout (warehouse is now awake after first attempt)
+    const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
+    if (!isTimeout) throw err;
+
+    const response = await fetch('/api/filters', {
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(
+        `Filters request failed on retry (${response.status}): ${text || response.statusText}`
+      );
+    }
+
+    cached = await response.json();
+    return cached!;
   }
-
-  cached = await response.json();
-  return cached!;
 }
 
 export const filterService = {
