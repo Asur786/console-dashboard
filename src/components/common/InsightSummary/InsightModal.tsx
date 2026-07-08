@@ -56,9 +56,21 @@ const useStyles = makeStyles({
 /* ------------------------------------------------------------------ */
 /*  Helpers — same markdown renderer as InsightCard                   */
 /* ------------------------------------------------------------------ */
+function autoHighlight(text: string): string {
+  const segments = text.split(/(\*\*.*?\*\*)/g);
+  return segments.map((seg, i) => {
+    if (i % 2 === 1) return seg;
+    return seg
+      .replace(/\b(Dollar Sales|Volume Sales|Dollar Share|Volume Share|YoY Growth|Distribution)\b/g, '**$1**')
+      .replace(/(\$[\d,]+(?:\.\d+)?[KMBkmb]?\b)/g, '**$1**')
+      .replace(/([+-]?\d+(?:\.\d+)?%)/g, '**$1**')
+      .replace(/\b(strong growth|strong momentum|strong performance|price premium|premium pricing|premium position(?:ing)?|commanding|urgently|significantly below|significantly above|expanding|contracting|declining)\b/gi, '**$1**');
+  }).join('');
+}
+
 function renderMarkdown(text: string): React.ReactNode {
   if (!text) return null;
-  const lines = text.split('\n');
+  const lines = autoHighlight(text).split('\n');
   const elements: React.ReactNode[] = [];
 
   lines.forEach((line, li) => {

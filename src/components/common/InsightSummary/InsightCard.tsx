@@ -64,26 +64,57 @@ const useStyles = makeStyles({
   },
 });
 
+/** Auto-highlight key business terms in plain-text segments.
+ *  Splits on existing **..** markers so already-bold text is never double-wrapped.
+ */
+function autoHighlight(text: string): string {
+  // Split into: [plaintext, **bold**, plaintext, **bold**, ...]
+  const segments = text.split(/(\*\*.*?\*\*)/g);
+
+  return segments
+    .map((seg, i) => {
+      // Odd indices are already inside **..** — leave them alone
+      if (i % 2 === 1) return seg;
+
+      return seg
+        // ── KPI names ──────────────────────────────────────────────
+        .replace(/\b(Dollar Sales|Volume Sales|Dollar Share|Volume Share|YoY Growth|Distribution)\b/g,
+          '**$1**')
+        // ── Currency values: $1K, $2.3M, $500 ───────────────────
+        .replace(/(\$[\d,]+(?:\.\d+)?[KMBkmb]?\b)/g, '**$1**')
+        // ── Percentages: 10.4%, +10.4%, -5.2% ───────────────────
+        .replace(/([+-]?\d+(?:\.\d+)?%)/g, '**$1**')
+        // ── Key performance adjectives & business phrases ─────────
+        .replace(
+          /\b(strong growth|strong momentum|strong performance|price premium|premium pricing|premium position(?:ing)?|commanding|urgently|significantly below|significantly above|expanding|contracting|declining)\b/gi,
+          '**$1**',
+        );
+    })
+    .join('');
+}
+
 /** Preprocess Genie text: convert inline numbered lists like
  *  "intro: (1) item one; (2) item two; and (3) item three"
- *  into separate bullet lines.
+ *  into separate bullet lines, then apply auto-highlighting.
  */
 function preprocessText(text: string): string {
-  if (!/\(\d+\)/.test(text)) return text;
+  let result = text;
 
-  return text
-    // "intro: (1) x" → "intro:\n• x"
-    .replace(/:\s*\(1\)\s+/g, ':\n\u2022 ')
-    // "(1) x" at line start → "• x"
-    .replace(/^\(1\)\s+/gm, '\u2022 ')
-    // "; (N) x"       → "\n• x"
-    .replace(/;\s*\((\d+)\)\s+/g, '\n\u2022 ')
-    // "; and (N) x"   → "\n• x"
-    .replace(/;\s*and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
-    // ", and (N) x"   → "\n• x"
-    .replace(/,\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
-    // " and (N) x" (no semicolon/comma) → "\n• x"
-    .replace(/\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ');
+  // 1. Numbered list → separate bullets
+  if (/\(\d+\)/.test(result)) {
+    result = result
+      .replace(/:\s*\(1\)\s+/g, ':\n\u2022 ')
+      .replace(/^\(1\)\s+/gm, '\u2022 ')
+      .replace(/;\s*\((\d+)\)\s+/g, '\n\u2022 ')
+      .replace(/;\s*and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
+      .replace(/,\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ')
+      .replace(/\s+and\s+\((\d+)\)\s+/gi, '\n\u2022 ');
+  }
+
+  // 2. Auto-highlight key terms
+  result = autoHighlight(result);
+
+  return result;
 }
 
 /** Convert **bold**, *italic*, line breaks, and - bullets to React nodes. */
