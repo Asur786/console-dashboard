@@ -65,14 +65,28 @@ def _iso(value: Any) -> Optional[str]:
     return str(value)
 
 
+def _to_str_list(value: Any) -> list[str]:
+    """
+    Normalise a DB ARRAY<STRING> column into a plain list of strings.
+
+    The Databricks SQL connector may return array columns as NumPy arrays,
+    so we must NOT use truthiness (`value or []`) — bool() on a multi-element
+    NumPy array raises "truth value of an array is ambiguous". Check for None
+    explicitly instead.
+    """
+    if value is None:
+        return []
+    return [str(v) for v in value]
+
+
 def _row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     """Normalise a raw DB row into a plain dict with ISO 8601 timestamp strings."""
     return {
         "view_id":             row.get("view_id"),
         "user_id":             row.get("user_id"),
         "generated_view_name": row.get("generated_view_name"),
-        "visible_filters":     list(row.get("visible_filters") or []),
-        "visible_kpis":        list(row.get("visible_kpis") or []),
+        "visible_filters":     _to_str_list(row.get("visible_filters")),
+        "visible_kpis":        _to_str_list(row.get("visible_kpis")),
         "is_default":          bool(row.get("is_default")),
         "created_at":          _iso(row.get("created_at")),
         "updated_at":          _iso(row.get("updated_at")),
