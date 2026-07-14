@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Response, status
 from typing import Optional
 
 from models.preference import (
@@ -140,7 +140,7 @@ async def update_view(
 
 @router.delete(
     "/preferences/views/{view_id}",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a saved view",
     tags=["preferences"],
 )
@@ -148,7 +148,7 @@ async def delete_view(
     view_id: str,
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
-) -> None:
+) -> Response:
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         deleted = preference_service.delete_view(user_id, view_id)
@@ -158,6 +158,8 @@ async def delete_view(
 
     if not deleted:
         raise HTTPException(status_code=404, detail="View not found.")
+    # 204 responses must not carry a body — return an empty Response explicitly.
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --------------------------------------------------------------------------- #
