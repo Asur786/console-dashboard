@@ -42,21 +42,32 @@ async def lifespan(_app: FastAPI):
     """
     Application lifespan handler.
 
-    On startup, ensures the user preferences schema and Delta table exist in
-    Unity Catalog so the API never fails on a missing object. The operation is
-    idempotent — existing schema, table and data are never modified.
+    On startup, best-effort ensures the user preferences schema and Delta table
+    exist in Unity Catalog so the API never fails on a missing object. The
+    operation is idempotent — existing schema, table and data are never
+    modified.
 
-    Fail-fast policy: if initialization raises (e.g. schema created but table
-    creation fails), the exception propagates and startup is aborted. This
-    makes a bad deployment fail immediately instead of surfacing errors later
-    on individual preference API requests.
+    Non-fatal policy: initialization runs inside the container boot sequence,
+    so a failure here (missing UC privileges, cold/unavailable SQL warehouse,
+    transient network error) must NOT crash the whole app. Databricks Apps
+    treats a lifespan exception as a startup crash, which would take down the
+    entire dashboard — including features that don't touch preferences. We log
+    the failure and let the app start; because the table is provisioned once
+    and normally already exists, CRUD continues to work regardless.
 
     When Databricks is not configured (local dev), initialization is skipped
     with a warning so the rest of the app can still be exercised.
     """
     if settings.is_databricks_configured:
-        logger.info("Running Unity Catalog initialization for user preferences...")
-        preference_repository.ensure_schema_and_table()
+        try:
+            logger.info("Running Unity Catalog initialization for user preferences...")
+            preference_repository.ensure_schema_and_table()
+        except Exception:
+            logger.exception(
+                "User preferences initialization failed during startup — the app "
+                "will still start. If the table already exists, preference endpoints "
+                "remain fully functional."
+            )
     else:
         logger.warning(
             "Databricks not configured — skipping preferences table initialization."
