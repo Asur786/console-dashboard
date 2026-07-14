@@ -24,16 +24,53 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+import logging
+from contextlib import asynccontextmanager
+
 from config.settings import settings
 from routes.filters import router as filters_router
 from routes.kpis import router as kpis_router
 from routes.insights import router as insights_router
+from routes.preferences import router as preferences_router
+from repositories.preference_repository import preference_repository
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """
+    Application lifespan handler.
+
+    On startup, ensures the user preferences schema and Delta table exist in
+    Unity Catalog so the API never fails on a missing object. The operation is
+    idempotent — existing schema, table and data are never modified.
+
+    Fail-fast policy: if initialization raises (e.g. schema created but table
+    creation fails), the exception propagates and startup is aborted. This
+    makes a bad deployment fail immediately instead of surfacing errors later
+    on individual preference API requests.
+
+    When Databricks is not configured (local dev), initialization is skipped
+    with a warning so the rest of the app can still be exercised.
+    """
+    if settings.is_databricks_configured:
+        logger.info("Running Unity Catalog initialization for user preferences...")
+        preference_repository.ensure_schema_and_table()
+    else:
+        logger.warning(
+            "Databricks not configured — skipping preferences table initialization."
+        )
+    yield
+    # No shutdown work required.
+
 
 app = FastAPI(
     title="Console Dashboard API",
     version="0.1.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # --- CORS (allows Vite dev server at localhost:5173) ---
@@ -49,6 +86,7 @@ app.add_middleware(
 app.include_router(filters_router, prefix="/api", tags=["filters"])
 app.include_router(kpis_router, prefix="/api", tags=["kpis"])
 app.include_router(insights_router, prefix="/api", tags=["insights"])
+app.include_router(preferences_router, prefix="/api", tags=["preferences"])
 
 
 @app.get("/api/health")

@@ -53,6 +53,15 @@ class Settings:
     def DATABRICKS_SCHEMA(self) -> str:
         return os.getenv("DATABRICKS_SCHEMA", "default")
 
+    # --- User Preferences table location ---
+    @property
+    def PREFERENCES_CATALOG(self) -> str:
+        return os.getenv("PREFERENCES_CATALOG", "workspace")
+
+    @property
+    def PREFERENCES_SCHEMA(self) -> str:
+        return os.getenv("PREFERENCES_SCHEMA", "preferences")
+
     # --- App ---
     APP_PORT: int = int(os.getenv("APP_PORT", "8000"))
     CORS_ORIGINS: list[str] = os.getenv(

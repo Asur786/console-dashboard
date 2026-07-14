@@ -135,6 +135,28 @@ def execute_query(
     return result
 
 
+def execute_write(
+    sql: str,
+    params: dict[str, Any] | None = None,
+) -> None:
+    """
+    Execute a write statement (INSERT / UPDATE / DELETE / MERGE / CREATE)
+    against the Databricks SQL Warehouse.
+
+    Unlike execute_query, this does NOT attempt to fetch results — DML
+    statements return no result set and cursor.description is None.
+
+    - Uses parameterised queries (%(name)s placeholders) to prevent SQL injection.
+    """
+    logger.debug("Executing write SQL:\n%s\nParams: %s", sql, params)
+
+    with _connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, parameters=params)
+
+    logger.debug("Write statement executed successfully")
+
+
 # =========================================================================== #
 #  DatabricksService                                                           #
 # =========================================================================== #

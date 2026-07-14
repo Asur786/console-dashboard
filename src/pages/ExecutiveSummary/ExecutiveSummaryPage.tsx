@@ -1,5 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { makeStyles, tokens } from '@fluentui/react-components';
+import {
+  makeStyles,
+  tokens,
+  Dropdown,
+  Option,
+  Field,
+} from '@fluentui/react-components';
 import {
   DashboardHeader,
   FilterBar,
@@ -12,10 +18,12 @@ import {
 import { useFilters } from '../../hooks/useFilters';
 import { kpiService } from '../../services/kpi.service';
 import { insightService } from '../../services/insight.service';
+import { preferenceService } from '../../services/preference.service';
 import type { ExecFilters } from '../../types/executive.types';
 import type { DashboardFilterOptions } from '../../types/filter.types';
 import type { KpiResult } from '../../types/kpi.types';
 import type { InsightResponse } from '../../types/insight.types';
+import type { SavedView, FilterKey, KpiKey } from '../../types/preference.types';
 
 /* ------------------------------------------------------------------ */
 /*  Styles — page-level layout only                                   */
@@ -30,6 +38,14 @@ const useStyles = makeStyles({
   divider: {
     height: '1px',
     backgroundColor: tokens.colorNeutralStroke2,
+  },
+  viewSelectorRow: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '12px',
+  },
+  viewDropdown: {
+    minWidth: '320px',
   },
 });
 
@@ -79,6 +95,22 @@ const FILTER_DEFS: {
 ];
 
 /* ------------------------------------------------------------------ */
+/*  Saved View integration helpers                                    */
+/* ------------------------------------------------------------------ */
+
+/** Sentinel value for the "All (no saved view)" dropdown choice. */
+const ALL_VIEW_ID = '__ALL__';
+
+/**
+ * Normalise a KPI display label to its preference key form.
+ * "Dollar Sales" → "dollar_sales", "YoY Growth" → "yoy_growth".
+ * Lets us match KpiResult.label against SavedView.visibleKpis (KpiKey[]).
+ */
+function kpiLabelToKey(label: string): string {
+  return label.toLowerCase().replace(/\s+/g, '_');
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page component — composition only                                 */
 /* ------------------------------------------------------------------ */
 const ExecutiveSummaryPage: React.FC = () => {
@@ -97,6 +129,52 @@ const ExecutiveSummaryPage: React.FC = () => {
   const [insight, setInsight]           = useState<InsightResponse | null>(null);
   const [insightLoading, setInsightLoading] = useState(true);
   const [insightError, setInsightError] = useState<string | null>(null);
+
+  // ── Saved View (User Preference) integration ──────────────────────
+  const [savedViews, setSavedViews]       = useState<SavedView[]>([]);
+  const [selectedViewId, setSelectedViewId] = useState<string>(ALL_VIEW_ID);
+  // null visibility = show everything (no view applied / "All")
+  const [visibleFilters, setVisibleFilters] = useState<FilterKey[] | null>(null);
+  const [visibleKpis, setVisibleKpis]       = useState<KpiKey[] | null>(null);
+
+  // Apply a saved view's visibility config (does NOT touch filter values)
+  const applyView = useCallback((view: SavedView | null) => {
+    if (!view) {
+      setSelectedViewId(ALL_VIEW_ID);
+      setVisibleFilters(null);
+      setVisibleKpis(null);
+      return;
+    }
+    setSelectedViewId(view.viewId);
+    setVisibleFilters(view.visibleFilters);
+    setVisibleKpis(view.visibleKpis);
+  }, []);
+
+  // Load saved views on mount; auto-apply the default view if one exists
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const views = await preferenceService.listViews();
+        if (cancelled) return;
+        setSavedViews(views);
+        const defaultView = views.find(v => v.isDefault);
+        if (defaultView) applyView(defaultView);
+      } catch {
+        // Preferences are optional — silently fall back to showing everything
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applyView]);
+
+  const handleViewChange = useCallback((viewId: string) => {
+    if (viewId === ALL_VIEW_ID) {
+      applyView(null);
+      return;
+    }
+    const view = savedViews.find(v => v.viewId === viewId) ?? null;
+    applyView(view);
+  }, [savedViews, applyView]);
 
   /**
    * Fetch KPIs then immediately auto-generate AI insights with those values.
@@ -180,6 +258,22 @@ const ExecutiveSummaryPage: React.FC = () => {
   const handleDismissError = useCallback(() => setError(null), []);
   const handleRetry        = useCallback(() => fetchAll(filters), [filters, fetchAll]);
 
+  // ── Derived visibility (based on the selected saved view) ─────────
+  // null → show all. Otherwise render only the keys listed in the view.
+  const shownFilterDefs = visibleFilters
+    ? FILTER_DEFS.filter(def => visibleFilters.includes(def.key as FilterKey))
+    : FILTER_DEFS;
+
+  const shownKpis = visibleKpis
+    ? kpis.filter(kpi => visibleKpis.includes(kpiLabelToKey(kpi.label) as KpiKey))
+    : kpis;
+
+  const selectedViewName =
+    selectedViewId === ALL_VIEW_ID
+      ? 'All (no saved view)'
+      : savedViews.find(v => v.viewId === selectedViewId)?.generatedViewName
+        ?? 'All (no saved view)';
+
   return (
     <div className={styles.page}>
       {/* Page header */}
@@ -188,6 +282,31 @@ const ExecutiveSummaryPage: React.FC = () => {
         timestamp={lastUpdated}
       />
 
+      {/* Saved View selector — applies visible filters/KPIs from User Preferences */}
+      {savedViews.length > 0 && (
+        <div className={styles.viewSelectorRow}>
+          <Field label="Saved View" className={styles.viewDropdown}>
+            <Dropdown
+              value={selectedViewName}
+              selectedOptions={[selectedViewId]}
+              onOptionSelect={(_, data) => handleViewChange(data.optionValue ?? ALL_VIEW_ID)}
+            >
+              <Option value={ALL_VIEW_ID} text="All (no saved view)">
+                All (no saved view)
+              </Option>
+              {savedViews.map(view => (
+                <Option
+                  key={view.viewId}
+                  value={view.viewId}
+                  text={view.generatedViewName}
+                >
+                  {view.generatedViewName}{view.isDefault ? '  ★' : ''}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        </div>
+      )}
       {/* Filter bar — options sourced from FilterService */}
       <FilterBar
         activeCount={activeCount(filters)}
@@ -195,7 +314,7 @@ const ExecutiveSummaryPage: React.FC = () => {
         onApply={handleApply}
         onReset={handleReset}
       >
-        {FILTER_DEFS.map(({ key, label, optionsKey }) => (
+        {shownFilterDefs.map(({ key, label, optionsKey }) => (
           <FilterDropdown
             key={key}
             label={label}
@@ -218,9 +337,9 @@ const ExecutiveSummaryPage: React.FC = () => {
 
       <div className={styles.divider} />
 
-      {/* KPI cards — skeletons while loading, previous values preserved on error */}
+      {/* KPI cards — filtered by the selected saved view (all when none) */}
       <KPIGrid title="Performance Highlights" loading={kpiLoading} skeletonCount={5}>
-        {kpis.map(kpi => (
+        {shownKpis.map(kpi => (
           <KPICard
             key={kpi.id}
             label={kpi.label}

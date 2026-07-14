@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { makeStyles, tokens } from '@fluentui/react-components';
 import {
   BoardRegular,
+  Settings20Regular,
 } from '@fluentui/react-icons';
 
 const useStyles = makeStyles({
@@ -39,6 +40,7 @@ const useStyles = makeStyles({
 
 const navItems = [
   { to: '/', label: 'Executive Summary', icon: <BoardRegular /> },
+  { to: '/preferences', label: 'User Preferences', icon: <Settings20Regular /> },
 ];
 
 export const Sidebar: React.FC = () => {
