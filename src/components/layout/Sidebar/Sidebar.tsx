@@ -2,9 +2,9 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { makeStyles, tokens } from '@fluentui/react-components';
 import {
-  BoardRegular,
   Settings20Regular,
 } from '@fluentui/react-icons';
+import { ROUTES } from '../../../constants/routes';
 
 const useStyles = makeStyles({
   sidebar: {
@@ -39,8 +39,7 @@ const useStyles = makeStyles({
 });
 
 const navItems = [
-  { to: '/', label: 'Executive Summary', icon: <BoardRegular /> },
-  { to: '/preferences', label: 'User Preferences', icon: <Settings20Regular /> },
+  { to: ROUTES.PREFERENCES, label: 'User Preferences', icon: <Settings20Regular /> },
 ];
 
 export const Sidebar: React.FC = () => {

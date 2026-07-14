@@ -14,7 +14,7 @@ import {
   Delete20Regular,
   Star20Filled,
   Star20Regular,
-  ArrowDownload20Regular,
+  Open20Regular,
 } from '@fluentui/react-icons';
 import {
   AVAILABLE_FILTERS,
@@ -26,6 +26,7 @@ import type {
   SavedView,
 } from '../../types/preference.types';
 import { preferenceService } from '../../services/preference.service';
+import { useOpenDashboard } from '../../hooks/useOpenDashboard';
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                            */
@@ -178,6 +179,7 @@ function buildPreviewName(filters: FilterKey[], kpis: KpiKey[]): string {
 /* ------------------------------------------------------------------ */
 const PreferencesPage: React.FC = () => {
   const styles = useStyles();
+  const openDashboard = useOpenDashboard();
 
   // Selection state
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
@@ -225,35 +227,38 @@ const PreferencesPage: React.FC = () => {
     );
   }, []);
 
-  /* ---- Save ---- */
+  /* ---- Save & Continue: create the view, then open the dashboard ---- */
   const handleSave = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
-      await preferenceService.createView({
+      const created = await preferenceService.createView({
         visibleFilters: selectedFilters,
         visibleKpis: selectedKpis,
         isDefault: makeDefault,
       });
-      // Reset the form and refresh the list
-      setSelectedFilters([]);
-      setSelectedKpis([]);
-      setMakeDefault(false);
-      await loadViews();
+      // Navigate straight to the dashboard with the new view's configuration.
+      openDashboard({
+        visibleFilters: created.visibleFilters,
+        visibleKpis: created.visibleKpis,
+        viewId: created.viewId,
+        viewName: created.generatedViewName,
+      });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save view.');
-    } finally {
-      setSaving(false);
+      setSaving(false); // stay on the page so the user can retry
     }
-  }, [selectedFilters, selectedKpis, makeDefault, loadViews]);
+  }, [selectedFilters, selectedKpis, makeDefault, openDashboard]);
 
-  /* ---- Load a saved view into the form ---- */
-  const handleLoad = useCallback((view: SavedView) => {
-    setSelectedFilters(view.visibleFilters);
-    setSelectedKpis(view.visibleKpis);
-    setMakeDefault(view.isDefault);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  /* ---- Open Dashboard: restore a saved view's configuration ---- */
+  const handleOpenDashboard = useCallback((view: SavedView) => {
+    openDashboard({
+      visibleFilters: view.visibleFilters,
+      visibleKpis: view.visibleKpis,
+      viewId: view.viewId,
+      viewName: view.generatedViewName,
+    });
+  }, [openDashboard]);
 
   /* ---- Delete ---- */
   const handleDelete = useCallback(async (viewId: string) => {
@@ -351,7 +356,7 @@ const PreferencesPage: React.FC = () => {
               disabled={!canSave || saving}
               onClick={handleSave}
             >
-              {saving ? 'Saving…' : 'Save View'}
+              {saving ? 'Saving…' : 'Save & Continue'}
             </Button>
           </div>
         </div>
@@ -387,11 +392,11 @@ const PreferencesPage: React.FC = () => {
                 <div className={styles.viewCardActions}>
                   <Button
                     size="small"
-                    appearance="secondary"
-                    icon={<ArrowDownload20Regular />}
-                    onClick={() => handleLoad(view)}
+                    appearance="primary"
+                    icon={<Open20Regular />}
+                    onClick={() => handleOpenDashboard(view)}
                   >
-                    Load
+                    Open Dashboard
                   </Button>
                   <Button
                     size="small"

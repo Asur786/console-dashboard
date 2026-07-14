@@ -64,3 +64,15 @@ export interface SavedView {
 export interface ViewListResponse {
   views: SavedView[];
 }
+
+/**
+ * Configuration passed from the User Preference page to the Dashboard via
+ * router navigation state. Describes which filters and KPI cards the dashboard
+ * should render (values are chosen on the dashboard itself, not here).
+ */
+export interface DashboardViewConfig {
+  visibleFilters: FilterKey[];
+  visibleKpis: KpiKey[];
+  viewId?: string;
+  viewName?: string;
+}
