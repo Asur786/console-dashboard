@@ -53,7 +53,8 @@ async function fetchAll(): Promise<ApiFiltersResponse> {
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       throw new Error(
-        `Filters request failed on retry (${response.status}): ${text || response.statusText}`
+        `Filters request failed on retry (${response.status}): ${text || response.statusText}`,
+        { cause: err }
       );
     }
 

@@ -8,6 +8,7 @@ import {
   Switch,
   Spinner,
   Badge,
+  Input,
 } from '@fluentui/react-components';
 import {
   Save20Regular,
@@ -26,7 +27,10 @@ import type {
   SavedView,
 } from '../../types/preference.types';
 import { preferenceService } from '../../services/preference.service';
+import { enterpriseService } from '../../services/enterprise.service';
 import { useOpenDashboard } from '../../hooks/useOpenDashboard';
+import { useAuthorization } from '../../hooks/useAuthorization';
+import type { ShareRecord, ShareRole } from '../../types/enterprise.types';
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                            */
@@ -159,6 +163,29 @@ const useStyles = makeStyles({
     padding: '12px 16px',
   },
   errorText: { color: tokens.colorStatusDangerForeground1, fontSize: tokens.fontSizeBase300 },
+  shareControls: {
+    display: 'grid',
+    gridTemplateColumns: '2fr 2fr 1fr auto auto',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  shareList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  shareItem: {
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusSmall,
+    padding: '8px 10px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  inlineHint: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+  },
 });
 
 /* ------------------------------------------------------------------ */
@@ -180,6 +207,7 @@ function buildPreviewName(filters: FilterKey[], kpis: KpiKey[]): string {
 const PreferencesPage: React.FC = () => {
   const styles = useStyles();
   const openDashboard = useOpenDashboard();
+  const authz = useAuthorization();
 
   // Selection state
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
@@ -192,6 +220,11 @@ const PreferencesPage: React.FC = () => {
   const [saving, setSaving]       = useState(false);
   const [busyId, setBusyId]       = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [shareResourceId, setShareResourceId] = useState('saved-view-demo');
+  const [shareTargetUser, setShareTargetUser] = useState('');
+  const [shareRole, setShareRole] = useState<ShareRole>('viewer');
+  const [shares, setShares] = useState<ShareRecord[]>([]);
+  const [sharesBusy, setSharesBusy] = useState(false);
 
   const previewName = useMemo(
     () => buildPreviewName(selectedFilters, selectedKpis),
@@ -212,7 +245,10 @@ const PreferencesPage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { loadViews(); }, [loadViews]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadViews();
+  }, [loadViews]);
 
   /* ---- Toggle helpers ---- */
   const toggleFilter = useCallback((key: FilterKey, checked: boolean) => {
@@ -288,7 +324,53 @@ const PreferencesPage: React.FC = () => {
     }
   }, [loadViews]);
 
-  const canSave = selectedFilters.length > 0 || selectedKpis.length > 0;
+  const canSave = (selectedFilters.length > 0 || selectedKpis.length > 0) && authz.canWritePreferences;
+
+  const loadShares = useCallback(async () => {
+    if (!shareResourceId.trim()) return;
+    setSharesBusy(true);
+    setError(null);
+    try {
+      const result = await enterpriseService.listShares(shareResourceId.trim());
+      setShares(result);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load sharing records.');
+    } finally {
+      setSharesBusy(false);
+    }
+  }, [shareResourceId]);
+
+  const handleCreateShare = useCallback(async () => {
+    if (!shareResourceId.trim() || !shareTargetUser.trim()) return;
+    setSharesBusy(true);
+    setError(null);
+    try {
+      await enterpriseService.createShare({
+        resourceId: shareResourceId.trim(),
+        resourceType: 'saved_view',
+        sharedWithUserId: shareTargetUser.trim(),
+        shareRole,
+      });
+      setShareTargetUser('');
+      await loadShares();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create share.');
+      setSharesBusy(false);
+    }
+  }, [loadShares, shareResourceId, shareRole, shareTargetUser]);
+
+  const handleRevokeShare = useCallback(async (sharedWithUserId: string) => {
+    if (!shareResourceId.trim()) return;
+    setSharesBusy(true);
+    setError(null);
+    try {
+      await enterpriseService.revokeShare(shareResourceId.trim(), sharedWithUserId);
+      await loadShares();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke share.');
+      setSharesBusy(false);
+    }
+  }, [loadShares, shareResourceId]);
 
   return (
     <div className={styles.page}>
@@ -364,6 +446,67 @@ const PreferencesPage: React.FC = () => {
 
       {/* Section 4 — Saved Views */}
       <div className={styles.section}>
+        <Text className={styles.sectionTitle}>Sharing Controls (Feasibility)</Text>
+        <Text className={styles.inlineHint}>
+          Minimal share/revoke controls to validate owner/editor/viewer workflows.
+        </Text>
+
+        <div className={styles.shareControls}>
+          <Input
+            value={shareResourceId}
+            onChange={(_, data) => setShareResourceId(data.value)}
+            placeholder="Resource ID"
+          />
+          <Input
+            value={shareTargetUser}
+            onChange={(_, data) => setShareTargetUser(data.value)}
+            placeholder="User email to share with"
+          />
+          <select
+            value={shareRole}
+            onChange={(event) => setShareRole(event.target.value as ShareRole)}
+            aria-label="Share role"
+          >
+            <option value="viewer">viewer</option>
+            <option value="editor">editor</option>
+            <option value="owner">owner</option>
+          </select>
+          <Button appearance="secondary" onClick={loadShares} disabled={sharesBusy || !authz.canShare}>
+            Refresh Shares
+          </Button>
+          <Button
+            appearance="primary"
+            onClick={handleCreateShare}
+            disabled={sharesBusy || !shareTargetUser.trim() || !authz.canShare}
+          >
+            Share
+          </Button>
+        </div>
+
+        <div className={styles.shareList}>
+          {shares.map((item) => (
+            <div key={`${item.resourceId}:${item.sharedWithUserId}`} className={styles.shareItem}>
+              <Text>
+                {item.sharedWithUserId} ({item.shareRole})
+              </Text>
+              <Button
+                size="small"
+                appearance="subtle"
+                icon={<Delete20Regular />}
+                onClick={() => handleRevokeShare(item.sharedWithUserId)}
+                disabled={sharesBusy || !authz.canShare}
+              >
+                Revoke
+              </Button>
+            </div>
+          ))}
+          {!sharesBusy && shares.length === 0 && (
+            <Text className={styles.inlineHint}>No shares for the current resource.</Text>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.section}>
         <Text className={styles.sectionTitle}>Saved Views</Text>
 
         {loading ? (
@@ -402,7 +545,7 @@ const PreferencesPage: React.FC = () => {
                     size="small"
                     appearance="subtle"
                     icon={view.isDefault ? <Star20Filled /> : <Star20Regular />}
-                    disabled={busyId === view.viewId || view.isDefault}
+                    disabled={busyId === view.viewId || view.isDefault || !authz.canWritePreferences}
                     onClick={() => handleSetDefault(view.viewId)}
                   >
                     Default
@@ -411,7 +554,7 @@ const PreferencesPage: React.FC = () => {
                     size="small"
                     appearance="subtle"
                     icon={<Delete20Regular />}
-                    disabled={busyId === view.viewId}
+                    disabled={busyId === view.viewId || !authz.canWritePreferences}
                     onClick={() => handleDelete(view.viewId)}
                   >
                     Delete

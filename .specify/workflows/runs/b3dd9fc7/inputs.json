@@ -1,0 +1,7 @@
+{
+  "inputs": {
+    "spec": "Validate Databricks Apps enterprise feasibility for AI for BI Console, including multi-source support, cross-workspace access, app sharing, user access management, enterprise integrations, and operational readiness.",
+    "integration": "copilot",
+    "scope": "full"
+  }
+}

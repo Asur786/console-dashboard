@@ -32,6 +32,7 @@ from routes.filters import router as filters_router
 from routes.kpis import router as kpis_router
 from routes.insights import router as insights_router
 from routes.preferences import router as preferences_router
+from routes.enterprise import router as enterprise_router
 from repositories.preference_repository import preference_repository
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ app.include_router(filters_router, prefix="/api", tags=["filters"])
 app.include_router(kpis_router, prefix="/api", tags=["kpis"])
 app.include_router(insights_router, prefix="/api", tags=["insights"])
 app.include_router(preferences_router, prefix="/api", tags=["preferences"])
+app.include_router(enterprise_router, prefix="/api", tags=["enterprise"])
 
 
 @app.get("/api/health")

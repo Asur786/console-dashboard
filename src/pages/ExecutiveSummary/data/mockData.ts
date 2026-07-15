@@ -5,7 +5,8 @@ import type { ExecKpi, ExecFilters } from '../../../types/executive.types';
  * Filter options are sourced from FilterService (services/filter.service.ts),
  * not hardcoded here.
  */
-export function getExecKpis(_filters: ExecFilters): ExecKpi[] {
+export function getExecKpis(filters: ExecFilters): ExecKpi[] {
+  void filters;
   return [
     {
       id: 'dollar-sales',

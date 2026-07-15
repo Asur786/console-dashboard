@@ -193,6 +193,7 @@ const ExecutiveSummaryPage: React.FC = () => {
   // Auto-load KPIs + insights on mount
   useEffect(() => {
     if (!viewConfig) return; // no view selected — will redirect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll(DEFAULT_FILTERS);
   }, [fetchAll, viewConfig]);
 

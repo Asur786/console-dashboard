@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { dashboardService } from '../services/dashboard.service';
 import type { DashboardFilters, DashboardData, FilterOptions } from '../types/dashboard.types';
 
@@ -12,16 +12,15 @@ const DEFAULT_FILTERS: DashboardFilters = {
 
 export function useDashboard() {
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
-  const [data, setData] = useState<DashboardData | null>(null);
+  const data: DashboardData | null = useMemo(
+    () => dashboardService.getDashboardData(filters),
+    [filters]
+  );
 
   const filterOptions: FilterOptions = useMemo(
     () => dashboardService.getFilterOptions(),
     []
   );
-
-  useEffect(() => {
-    setData(dashboardService.getDashboardData(filters));
-  }, [filters]);
 
   const updateFilter = useCallback(
     <K extends keyof DashboardFilters>(key: K, value: DashboardFilters[K]) => {

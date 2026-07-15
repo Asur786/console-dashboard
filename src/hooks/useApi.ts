@@ -14,12 +14,14 @@ export function useApi<T>(fetchFn: () => Promise<T>): UseApiState<T> {
   const [error, setError] = useState<ApiError | null>(null);
   const [trigger, setTrigger] = useState(0);
 
-  const refetch = useCallback(() => setTrigger((n) => n + 1), []);
+  const refetch = useCallback(() => {
+    setIsLoading(true);
+    setError(null);
+    setTrigger((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
 
     fetchFn()
       .then((result) => {

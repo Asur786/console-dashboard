@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Header, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Response, status
 from typing import Optional
 
 from models.preference import (
@@ -27,6 +27,8 @@ from models.preference import (
     ViewListResponse,
 )
 from services.preference_service import preference_service
+from services.auth_context import AccessProfile, get_access_profile
+from services.access_policy import enforce_roles, enforce_scope
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,7 +72,11 @@ def _resolve_user_id(
 async def list_views(
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
+    profile: AccessProfile = Depends(get_access_profile),
 ) -> ViewListResponse:
+    enforce_roles(profile, "admin", "user")
+    if profile.scopes:
+        enforce_scope(profile, "saved_view:read")
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         views = preference_service.list_views(user_id)
@@ -96,7 +102,11 @@ async def create_view(
     body: SaveViewRequest,
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
+    profile: AccessProfile = Depends(get_access_profile),
 ) -> UserPreferenceView:
+    enforce_roles(profile, "admin", "user")
+    if profile.scopes:
+        enforce_scope(profile, "saved_view:write")
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         return preference_service.create_view(user_id, body)
@@ -121,7 +131,11 @@ async def update_view(
     body: SaveViewRequest,
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
+    profile: AccessProfile = Depends(get_access_profile),
 ) -> UserPreferenceView:
+    enforce_roles(profile, "admin", "user")
+    if profile.scopes:
+        enforce_scope(profile, "saved_view:write")
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         updated = preference_service.update_view(user_id, view_id, body)
@@ -148,7 +162,11 @@ async def delete_view(
     view_id: str,
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
+    profile: AccessProfile = Depends(get_access_profile),
 ) -> Response:
+    enforce_roles(profile, "admin", "user")
+    if profile.scopes:
+        enforce_scope(profile, "saved_view:write")
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         deleted = preference_service.delete_view(user_id, view_id)
@@ -177,7 +195,11 @@ async def set_default_view(
     view_id: str,
     request: Request,
     x_forwarded_email: Optional[str] = Header(default=None, alias="X-Forwarded-Email"),
+    profile: AccessProfile = Depends(get_access_profile),
 ) -> UserPreferenceView:
+    enforce_roles(profile, "admin", "user")
+    if profile.scopes:
+        enforce_scope(profile, "saved_view:write")
     user_id = _resolve_user_id(request, x_forwarded_email)
     try:
         updated = preference_service.set_default(user_id, view_id)

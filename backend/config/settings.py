@@ -7,6 +7,7 @@ to the browser bundle.
 """
 
 import os
+import json
 
 
 class Settings:
@@ -61,6 +62,39 @@ class Settings:
     @property
     def PREFERENCES_SCHEMA(self) -> str:
         return os.getenv("PREFERENCES_SCHEMA", "preferences")
+
+    # --- Enterprise feasibility flags ---
+    @property
+    def ENTERPRISE_ENABLE_EXTERNAL_MOCK_SOURCE(self) -> bool:
+        return os.getenv("ENTERPRISE_ENABLE_EXTERNAL_MOCK_SOURCE", "true").lower() == "true"
+
+    @property
+    def ENTERPRISE_WORKSPACE_POLICY(self) -> dict[str, dict[str, object]]:
+        """
+        Workspace allowlist policy.
+
+        Example env value:
+        {
+          "workspace-a": {"policy_id": "policy-a", "catalogs": ["workspace"], "schemas": ["default"]}
+        }
+        """
+        raw = os.getenv("ENTERPRISE_WORKSPACE_POLICY", "").strip()
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
+        # Safe default for local feasibility tests
+        return {
+            "workspace-default": {
+                "policy_id": "policy-default",
+                "catalogs": [self.DATABRICKS_CATALOG],
+                "schemas": [self.DATABRICKS_SCHEMA],
+            }
+        }
 
     # --- App ---
     APP_PORT: int = int(os.getenv("APP_PORT", "8000"))

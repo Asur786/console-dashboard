@@ -34,3 +34,20 @@ backend/.venv/
 __pycache__/
 *.pyc
 *.pyo
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Frontend/build caches
+*.tsbuildinfo
+.vitest/
+
+# Local tool state (do not commit)
+.tokenguard/
+
+# Keep these in repo for SpecKit + automation
+# .github/
+# .specify/
