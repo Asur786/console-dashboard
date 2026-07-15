@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   makeStyles,
   tokens,
@@ -9,43 +9,43 @@ import {
   Spinner,
   Badge,
   Input,
-} from '@fluentui/react-components';
+} from "@fluentui/react-components";
 import {
   Save20Regular,
   Delete20Regular,
   Star20Filled,
   Star20Regular,
   Open20Regular,
-} from '@fluentui/react-icons';
+} from "@fluentui/react-icons";
 import {
   AVAILABLE_FILTERS,
   AVAILABLE_KPIS,
-} from '../../types/preference.types';
+} from "../../types/preference.types";
 import type {
   FilterKey,
   KpiKey,
   SavedView,
-} from '../../types/preference.types';
-import { preferenceService } from '../../services/preference.service';
-import { enterpriseService } from '../../services/enterprise.service';
-import { useOpenDashboard } from '../../hooks/useOpenDashboard';
-import { useAuthorization } from '../../hooks/useAuthorization';
-import type { ShareRecord, ShareRole } from '../../types/enterprise.types';
+} from "../../types/preference.types";
+import { preferenceService } from "../../services/preference.service";
+import { enterpriseService } from "../../services/enterprise.service";
+import { useOpenDashboard } from "../../hooks/useOpenDashboard";
+import { useAuthorization } from "../../hooks/useAuthorization";
+import type { ShareRecord, ShareRole } from "../../types/enterprise.types";
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                            */
 /* ------------------------------------------------------------------ */
 const useStyles = makeStyles({
   page: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    maxWidth: '1200px',
+    display: "flex",
+    flexDirection: "column",
+    gap: "24px",
+    maxWidth: "1200px",
   },
   headerRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
   },
   pageTitle: {
     fontSize: tokens.fontSizeHero700,
@@ -63,10 +63,10 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusMedium,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     boxShadow: tokens.shadow4,
-    padding: '20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
+    padding: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
   },
   sectionTitle: {
     fontSize: tokens.fontSizeBase400,
@@ -74,29 +74,29 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
   },
   checkboxGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: '8px',
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: "8px",
   },
 
   /* -- Save row ----------------------------------------------------- */
   saveRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '16px',
-    flexWrap: 'wrap',
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexWrap: "wrap",
   },
   namePreview: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
   },
   namePreviewLabel: {
     fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground3,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
   },
   namePreviewValue: {
     fontSize: tokens.fontSizeBase300,
@@ -104,34 +104,34 @@ const useStyles = makeStyles({
     color: tokens.colorBrandForeground1,
   },
   saveActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
   },
 
   /* -- Saved views grid --------------------------------------------- */
   savedGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '14px',
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    gap: "14px",
   },
   viewCard: {
     backgroundColor: tokens.colorNeutralBackground1,
     borderRadius: tokens.borderRadiusMedium,
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     boxShadow: tokens.shadow2,
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    transition: 'box-shadow 0.15s ease',
-    ':hover': { boxShadow: tokens.shadow8 },
+    padding: "16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    transition: "box-shadow 0.15s ease",
+    ":hover": { boxShadow: tokens.shadow8 },
   },
   viewCardHeader: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '8px',
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "8px",
   },
   viewName: {
     fontSize: tokens.fontSizeBase300,
@@ -140,47 +140,53 @@ const useStyles = makeStyles({
     lineHeight: tokens.lineHeightBase300,
   },
   viewCardActions: {
-    display: 'flex',
-    gap: '6px',
-    flexWrap: 'wrap',
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap",
   },
 
   /* -- States ------------------------------------------------------- */
   centeredState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '32px',
-    textAlign: 'center',
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    padding: "32px",
+    textAlign: "center",
   },
-  stateText: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase300 },
+  stateText: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase300,
+  },
   errorBanner: {
     backgroundColor: tokens.colorStatusDangerBackground1,
     border: `1px solid ${tokens.colorStatusDangerBorder1}`,
     borderRadius: tokens.borderRadiusMedium,
-    padding: '12px 16px',
+    padding: "12px 16px",
   },
-  errorText: { color: tokens.colorStatusDangerForeground1, fontSize: tokens.fontSizeBase300 },
+  errorText: {
+    color: tokens.colorStatusDangerForeground1,
+    fontSize: tokens.fontSizeBase300,
+  },
   shareControls: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 2fr 1fr auto auto',
-    gap: '8px',
-    alignItems: 'center',
+    display: "grid",
+    gridTemplateColumns: "2fr 2fr 1fr auto auto",
+    gap: "8px",
+    alignItems: "center",
   },
   shareList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
   },
   shareItem: {
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusSmall,
-    padding: '8px 10px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    padding: "8px 10px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   inlineHint: {
     color: tokens.colorNeutralForeground3,
@@ -193,11 +199,15 @@ const useStyles = makeStyles({
 /* ------------------------------------------------------------------ */
 function buildPreviewName(filters: FilterKey[], kpis: KpiKey[]): string {
   const filterLabels = filters.length
-    ? AVAILABLE_FILTERS.filter(f => filters.includes(f.key)).map(f => f.label).join(', ')
-    : 'All';
+    ? AVAILABLE_FILTERS.filter((f) => filters.includes(f.key))
+        .map((f) => f.label)
+        .join(", ")
+    : "All";
   const kpiLabels = kpis.length
-    ? AVAILABLE_KPIS.filter(k => kpis.includes(k.key)).map(k => k.label).join(', ')
-    : 'All';
+    ? AVAILABLE_KPIS.filter((k) => kpis.includes(k.key))
+        .map((k) => k.label)
+        .join(", ")
+    : "All";
   return `Filters(${filterLabels}) | KPIs(${kpiLabels})`;
 }
 
@@ -211,18 +221,18 @@ const PreferencesPage: React.FC = () => {
 
   // Selection state
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
-  const [selectedKpis, setSelectedKpis]       = useState<KpiKey[]>([]);
-  const [makeDefault, setMakeDefault]         = useState(false);
+  const [selectedKpis, setSelectedKpis] = useState<KpiKey[]>([]);
+  const [makeDefault, setMakeDefault] = useState(false);
 
   // Saved views state
-  const [views, setViews]         = useState<SavedView[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [saving, setSaving]       = useState(false);
-  const [busyId, setBusyId]       = useState<string | null>(null);
-  const [error, setError]         = useState<string | null>(null);
-  const [shareResourceId, setShareResourceId] = useState('saved-view-demo');
-  const [shareTargetUser, setShareTargetUser] = useState('');
-  const [shareRole, setShareRole] = useState<ShareRole>('viewer');
+  const [views, setViews] = useState<SavedView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [shareResourceId, setShareResourceId] = useState("saved-view-demo");
+  const [shareTargetUser, setShareTargetUser] = useState("");
+  const [shareRole, setShareRole] = useState<ShareRole>("viewer");
   const [shares, setShares] = useState<ShareRecord[]>([]);
   const [sharesBusy, setSharesBusy] = useState(false);
 
@@ -239,7 +249,9 @@ const PreferencesPage: React.FC = () => {
       const result = await preferenceService.listViews();
       setViews(result);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load saved views.');
+      setError(
+        err instanceof Error ? err.message : "Failed to load saved views.",
+      );
     } finally {
       setLoading(false);
     }
@@ -252,14 +264,14 @@ const PreferencesPage: React.FC = () => {
 
   /* ---- Toggle helpers ---- */
   const toggleFilter = useCallback((key: FilterKey, checked: boolean) => {
-    setSelectedFilters(prev =>
-      checked ? [...prev, key] : prev.filter(k => k !== key),
+    setSelectedFilters((prev) =>
+      checked ? [...prev, key] : prev.filter((k) => k !== key),
     );
   }, []);
 
   const toggleKpi = useCallback((key: KpiKey, checked: boolean) => {
-    setSelectedKpis(prev =>
-      checked ? [...prev, key] : prev.filter(k => k !== key),
+    setSelectedKpis((prev) =>
+      checked ? [...prev, key] : prev.filter((k) => k !== key),
     );
   }, []);
 
@@ -281,50 +293,61 @@ const PreferencesPage: React.FC = () => {
         viewName: created.generatedViewName,
       });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save view.');
+      setError(err instanceof Error ? err.message : "Failed to save view.");
       setSaving(false); // stay on the page so the user can retry
     }
   }, [selectedFilters, selectedKpis, makeDefault, openDashboard]);
 
   /* ---- Open Dashboard: restore a saved view's configuration ---- */
-  const handleOpenDashboard = useCallback((view: SavedView) => {
-    openDashboard({
-      visibleFilters: view.visibleFilters,
-      visibleKpis: view.visibleKpis,
-      viewId: view.viewId,
-      viewName: view.generatedViewName,
-    });
-  }, [openDashboard]);
+  const handleOpenDashboard = useCallback(
+    (view: SavedView) => {
+      openDashboard({
+        visibleFilters: view.visibleFilters,
+        visibleKpis: view.visibleKpis,
+        viewId: view.viewId,
+        viewName: view.generatedViewName,
+      });
+    },
+    [openDashboard],
+  );
 
   /* ---- Delete ---- */
-  const handleDelete = useCallback(async (viewId: string) => {
-    setBusyId(viewId);
-    setError(null);
-    try {
-      await preferenceService.deleteView(viewId);
-      await loadViews();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to delete view.');
-    } finally {
-      setBusyId(null);
-    }
-  }, [loadViews]);
+  const handleDelete = useCallback(
+    async (viewId: string) => {
+      setBusyId(viewId);
+      setError(null);
+      try {
+        await preferenceService.deleteView(viewId);
+        await loadViews();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to delete view.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [loadViews],
+  );
 
   /* ---- Set default ---- */
-  const handleSetDefault = useCallback(async (viewId: string) => {
-    setBusyId(viewId);
-    setError(null);
-    try {
-      await preferenceService.setDefault(viewId);
-      await loadViews();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to set default.');
-    } finally {
-      setBusyId(null);
-    }
-  }, [loadViews]);
+  const handleSetDefault = useCallback(
+    async (viewId: string) => {
+      setBusyId(viewId);
+      setError(null);
+      try {
+        await preferenceService.setDefault(viewId);
+        await loadViews();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to set default.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [loadViews],
+  );
 
-  const canSave = (selectedFilters.length > 0 || selectedKpis.length > 0) && authz.canWritePreferences;
+  const canSave =
+    (selectedFilters.length > 0 || selectedKpis.length > 0) &&
+    authz.canWritePreferences;
 
   const loadShares = useCallback(async () => {
     if (!shareResourceId.trim()) return;
@@ -334,7 +357,9 @@ const PreferencesPage: React.FC = () => {
       const result = await enterpriseService.listShares(shareResourceId.trim());
       setShares(result);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load sharing records.');
+      setError(
+        err instanceof Error ? err.message : "Failed to load sharing records.",
+      );
     } finally {
       setSharesBusy(false);
     }
@@ -347,30 +372,38 @@ const PreferencesPage: React.FC = () => {
     try {
       await enterpriseService.createShare({
         resourceId: shareResourceId.trim(),
-        resourceType: 'saved_view',
+        resourceType: "saved_view",
         sharedWithUserId: shareTargetUser.trim(),
         shareRole,
       });
-      setShareTargetUser('');
+      setShareTargetUser("");
       await loadShares();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create share.');
+      setError(err instanceof Error ? err.message : "Failed to create share.");
       setSharesBusy(false);
     }
   }, [loadShares, shareResourceId, shareRole, shareTargetUser]);
 
-  const handleRevokeShare = useCallback(async (sharedWithUserId: string) => {
-    if (!shareResourceId.trim()) return;
-    setSharesBusy(true);
-    setError(null);
-    try {
-      await enterpriseService.revokeShare(shareResourceId.trim(), sharedWithUserId);
-      await loadShares();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke share.');
-      setSharesBusy(false);
-    }
-  }, [loadShares, shareResourceId]);
+  const handleRevokeShare = useCallback(
+    async (sharedWithUserId: string) => {
+      if (!shareResourceId.trim()) return;
+      setSharesBusy(true);
+      setError(null);
+      try {
+        await enterpriseService.revokeShare(
+          shareResourceId.trim(),
+          sharedWithUserId,
+        );
+        await loadShares();
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Failed to revoke share.",
+        );
+        setSharesBusy(false);
+      }
+    },
+    [loadShares, shareResourceId],
+  );
 
   return (
     <div className={styles.page}>
@@ -378,7 +411,8 @@ const PreferencesPage: React.FC = () => {
       <div className={styles.headerRow}>
         <Text className={styles.pageTitle}>User Preferences</Text>
         <Text className={styles.pageSubtitle}>
-          Choose which filters and KPI cards appear on your dashboard, then save the view.
+          Choose which filters and KPI cards appear on your dashboard, then save
+          the view.
         </Text>
       </div>
 
@@ -438,7 +472,7 @@ const PreferencesPage: React.FC = () => {
               disabled={!canSave || saving}
               onClick={handleSave}
             >
-              {saving ? 'Saving…' : 'Save & Continue'}
+              {saving ? "Saving…" : "Save & Continue"}
             </Button>
           </div>
         </div>
@@ -446,9 +480,12 @@ const PreferencesPage: React.FC = () => {
 
       {/* Section 4 — Saved Views */}
       <div className={styles.section}>
-        <Text className={styles.sectionTitle}>Sharing Controls (Feasibility)</Text>
+        <Text className={styles.sectionTitle}>
+          Sharing Controls (Feasibility)
+        </Text>
         <Text className={styles.inlineHint}>
-          Minimal share/revoke controls to validate owner/editor/viewer workflows.
+          Minimal share/revoke controls to validate owner/editor/viewer
+          workflows.
         </Text>
 
         <div className={styles.shareControls}>
@@ -471,7 +508,11 @@ const PreferencesPage: React.FC = () => {
             <option value="editor">editor</option>
             <option value="owner">owner</option>
           </select>
-          <Button appearance="secondary" onClick={loadShares} disabled={sharesBusy || !authz.canShare}>
+          <Button
+            appearance="secondary"
+            onClick={loadShares}
+            disabled={sharesBusy || !authz.canShare}
+          >
             Refresh Shares
           </Button>
           <Button
@@ -485,7 +526,10 @@ const PreferencesPage: React.FC = () => {
 
         <div className={styles.shareList}>
           {shares.map((item) => (
-            <div key={`${item.resourceId}:${item.sharedWithUserId}`} className={styles.shareItem}>
+            <div
+              key={`${item.resourceId}:${item.sharedWithUserId}`}
+              className={styles.shareItem}
+            >
               <Text>
                 {item.sharedWithUserId} ({item.shareRole})
               </Text>
@@ -501,7 +545,9 @@ const PreferencesPage: React.FC = () => {
             </div>
           ))}
           {!sharesBusy && shares.length === 0 && (
-            <Text className={styles.inlineHint}>No shares for the current resource.</Text>
+            <Text className={styles.inlineHint}>
+              No shares for the current resource.
+            </Text>
           )}
         </div>
       </div>
@@ -516,15 +562,18 @@ const PreferencesPage: React.FC = () => {
         ) : views.length === 0 ? (
           <div className={styles.centeredState}>
             <Text className={styles.stateText}>
-              No saved views yet. Select filters and KPIs above, then click Save View.
+              No saved views yet. Select filters and KPIs above, then click Save
+              View.
             </Text>
           </div>
         ) : (
           <div className={styles.savedGrid}>
-            {views.map(view => (
+            {views.map((view) => (
               <div key={view.viewId} className={styles.viewCard}>
                 <div className={styles.viewCardHeader}>
-                  <Text className={styles.viewName}>{view.generatedViewName}</Text>
+                  <Text className={styles.viewName}>
+                    {view.generatedViewName}
+                  </Text>
                   {view.isDefault && (
                     <Badge appearance="tint" color="brand" size="small">
                       Default
@@ -545,7 +594,11 @@ const PreferencesPage: React.FC = () => {
                     size="small"
                     appearance="subtle"
                     icon={view.isDefault ? <Star20Filled /> : <Star20Regular />}
-                    disabled={busyId === view.viewId || view.isDefault || !authz.canWritePreferences}
+                    disabled={
+                      busyId === view.viewId ||
+                      view.isDefault ||
+                      !authz.canWritePreferences
+                    }
                     onClick={() => handleSetDefault(view.viewId)}
                   >
                     Default
@@ -554,7 +607,9 @@ const PreferencesPage: React.FC = () => {
                     size="small"
                     appearance="subtle"
                     icon={<Delete20Regular />}
-                    disabled={busyId === view.viewId || !authz.canWritePreferences}
+                    disabled={
+                      busyId === view.viewId || !authz.canWritePreferences
+                    }
                     onClick={() => handleDelete(view.viewId)}
                   >
                     Delete
