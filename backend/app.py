@@ -117,6 +117,14 @@ class UserTokenMiddleware:
         headers = dict(scope.get("headers") or [])
         raw = headers.get(b"x-forwarded-access-token")
         token = raw.decode("latin-1") if raw else None
+        # Diagnostic only — never log the token value itself.
+        path = scope.get("path", "")
+        if path.startswith("/api/"):
+            logger.warning(
+                "OBO middleware: x-forwarded-access-token %s for %s",
+                "PRESENT" if token else "ABSENT",
+                path,
+            )
         reset = user_access_token_var.set(token)
         try:
             await self.app(scope, receive, send)
