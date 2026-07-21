@@ -94,6 +94,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# --- On-behalf-of-user auth ---
+# Databricks Apps forwards the logged-in user's downscoped access token in the
+# `x-forwarded-access-token` header. We stash it in a context variable so the
+# data-query layer runs AS the user (Unity Catalog then filters per identity).
+# App-infrastructure queries (preferences table) opt out via as_app=True.
+#
+# Implemented as a pure-ASGI middleware (not BaseHTTPMiddleware) so the context
+# variable reliably propagates into the sync query threadpool.
+from services.databricks_service import user_access_token_var  # noqa: E402
+
+
+class UserTokenMiddleware:
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers") or [])
+        raw = headers.get(b"x-forwarded-access-token")
+        token = raw.decode("latin-1") if raw else None
+        reset = user_access_token_var.set(token)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            user_access_token_var.reset(reset)
+
+
+app.add_middleware(UserTokenMiddleware)
+
+
 # --- API Routes ---
 app.include_router(filters_router, prefix="/api", tags=["filters"])
 app.include_router(kpis_router, prefix="/api", tags=["kpis"])

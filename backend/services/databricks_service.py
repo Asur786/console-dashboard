@@ -14,6 +14,7 @@ Connection details are read from environment variables:
 
 from __future__ import annotations
 
+import contextvars
 import logging
 from contextlib import contextmanager
 from typing import Any, Generator
@@ -21,6 +22,14 @@ from typing import Any, Generator
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Per-request Databricks access token for the logged-in user (on-behalf-of).
+# Set by middleware from the `x-forwarded-access-token` header that Databricks
+# Apps injects. When present, data queries run AS the user so Unity Catalog
+# grants filter results per identity. App-infrastructure queries bypass it.
+user_access_token_var: contextvars.ContextVar["str | None"] = contextvars.ContextVar(
+    "user_access_token", default=None
+)
 
 # =========================================================================== #
 #  OAuth token cache (avoids re-fetching on every query within the process)   #
@@ -66,13 +75,18 @@ def _get_oauth_token() -> str:
 # =========================================================================== #
 
 @contextmanager
-def _connection() -> Generator[Any, None, None]:
+def _connection(as_app: bool = False) -> Generator[Any, None, None]:
     """Opens and closes a Databricks SQL connection.
 
     Auth priority:
-      1. DATABRICKS_TOKEN  (personal access token — local dev / explicit config)
-      2. DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET  (OAuth M2M —
-         auto-injected by Databricks Apps for the service principal)
+      1. On-behalf-of the logged-in user (x-forwarded-access-token) for data
+         queries — so Unity Catalog grants filter results per user.
+      2. DATABRICKS_TOKEN  (personal access token — local dev / explicit config)
+      3. DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET  (OAuth M2M —
+         auto-injected by Databricks Apps for the app service principal)
+
+    Pass as_app=True for app-infrastructure queries (e.g. the preferences
+    table) that must always run as the app identity, not the end user.
     """
     if not settings.is_databricks_configured:
         raise RuntimeError(
@@ -84,8 +98,11 @@ def _connection() -> Generator[Any, None, None]:
 
     from databricks import sql as dbsql  # lazy import
 
-    # Resolve auth token
-    access_token = settings.DATABRICKS_TOKEN or _get_oauth_token()
+    # Resolve auth token. Data queries run on-behalf-of the logged-in user
+    # (their forwarded token); app-infrastructure queries (as_app=True) always
+    # use the app identity (PAT locally, or the app service principal in prod).
+    user_token = None if as_app else user_access_token_var.get()
+    access_token = user_token or settings.DATABRICKS_TOKEN or _get_oauth_token()
 
     conn = dbsql.connect(
         server_hostname=settings.DATABRICKS_HOST,
@@ -103,6 +120,7 @@ def _connection() -> Generator[Any, None, None]:
 def execute_query(
     sql: str,
     params: dict[str, Any] | None = None,
+    as_app: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Execute a SQL statement against the Databricks SQL Warehouse
@@ -110,10 +128,11 @@ def execute_query(
 
     - Uses parameterised queries (%(name)s placeholders) to prevent SQL injection.
     - Coerces Decimal values to float for JSON serialisation.
+    - as_app=True runs as the app identity (for app-infrastructure tables).
     """
     logger.debug("Executing SQL:\n%s\nParams: %s", sql, params)
 
-    with _connection() as conn:
+    with _connection(as_app=as_app) as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, parameters=params)
             columns = [desc[0] for desc in cursor.description]
@@ -138,6 +157,7 @@ def execute_query(
 def execute_write(
     sql: str,
     params: dict[str, Any] | None = None,
+    as_app: bool = False,
 ) -> None:
     """
     Execute a write statement (INSERT / UPDATE / DELETE / MERGE / CREATE)
@@ -147,10 +167,11 @@ def execute_write(
     statements return no result set and cursor.description is None.
 
     - Uses parameterised queries (%(name)s placeholders) to prevent SQL injection.
+    - as_app=True runs as the app identity (for app-infrastructure tables).
     """
     logger.debug("Executing write SQL:\n%s\nParams: %s", sql, params)
 
-    with _connection() as conn:
+    with _connection(as_app=as_app) as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, parameters=params)
 

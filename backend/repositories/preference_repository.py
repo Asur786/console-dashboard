@@ -16,7 +16,21 @@ import re
 from typing import Any, Optional
 
 from config.settings import settings
-from services.databricks_service import execute_query, execute_write
+from services.databricks_service import (
+    execute_query as _execute_query,
+    execute_write as _execute_write,
+)
+
+
+# The preferences table is app infrastructure: it is always accessed with the
+# app identity (not the logged-in user's on-behalf-of token), so that every
+# user can read/write their own saved views regardless of their data grants.
+def execute_query(sql: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
+    return _execute_query(sql, params, as_app=True)
+
+
+def execute_write(sql: str, params: Optional[dict[str, Any]] = None) -> None:
+    _execute_write(sql, params, as_app=True)
 
 logger = logging.getLogger(__name__)
 
