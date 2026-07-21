@@ -13,16 +13,15 @@ import {
 import { useFilters } from "../../hooks/useFilters";
 import { kpiService } from "../../services/kpi.service";
 import { insightService } from "../../services/insight.service";
+import { preferenceService } from "../../services/preference.service";
+import { enterpriseService } from "../../services/enterprise.service";
 import { ROUTES } from "../../constants/routes";
 import type { ExecFilters } from "../../types/executive.types";
 import type { DashboardFilterOptions } from "../../types/filter.types";
+import type { SavedView } from "../../types/preference.types";
 import type { KpiResult } from "../../types/kpi.types";
 import type { InsightResponse } from "../../types/insight.types";
-import type {
-  DashboardViewConfig,
-  FilterKey,
-  KpiKey,
-} from "../../types/preference.types";
+import type { DashboardViewConfig } from "../../types/preference.types";
 
 /* ------------------------------------------------------------------ */
 /*  Styles — page-level layout only                                   */
@@ -41,6 +40,47 @@ const useStyles = makeStyles({
   viewCaption: {
     fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground3,
+  },
+  viewChips: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+    alignItems: "center",
+  },
+  viewChip: {
+    border: `1.5px solid ${tokens.colorNeutralStroke1}`,
+    backgroundColor: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground1,
+    borderRadius: "16px",
+    padding: "6px 14px",
+    fontSize: "12.5px",
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    transition: "all 0.15s",
+    ":hover": {
+      borderTopColor: tokens.colorBrandStroke1,
+      borderRightColor: tokens.colorBrandStroke1,
+      borderBottomColor: tokens.colorBrandStroke1,
+      borderLeftColor: tokens.colorBrandStroke1,
+    },
+  },
+  viewChipActive: {
+    backgroundColor: tokens.colorBrandBackground,
+    color: tokens.colorNeutralForegroundOnBrand,
+    borderTopColor: tokens.colorBrandBackground,
+    borderRightColor: tokens.colorBrandBackground,
+    borderBottomColor: tokens.colorBrandBackground,
+    borderLeftColor: tokens.colorBrandBackground,
+  },
+  viewChipStatic: {
+    color: tokens.colorNeutralForeground3,
+    borderRadius: "16px",
+    padding: "6px 14px",
+    fontSize: "12.5px",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    userSelect: "none",
   },
 });
 
@@ -128,21 +168,80 @@ const ExecutiveSummaryPage: React.FC = () => {
   const [insightLoading, setInsightLoading] = useState(true);
   const [insightError, setInsightError] = useState<string | null>(null);
 
+  // All of the user's saved views (for the in-page view switcher / demo).
+  const [allViews, setAllViews] = useState<SavedView[]>([]);
+  // The view currently applied on the page. Starts from the nav config;
+  // a viewId of "__ALL__" means "show everything" (All Views).
+  const [activeConfig, setActiveConfig] = useState<DashboardViewConfig | null>(
+    viewConfig,
+  );
+
+  useEffect(() => {
+    preferenceService
+      .listViews()
+      .then(setAllViews)
+      .catch(() => setAllViews([]));
+  }, []);
+
   // ── Visibility from the selected saved view ───────────────────────
   // Render ONLY the filters/KPIs contained in the selected view.
-  const visibleFilters: FilterKey[] | null = viewConfig?.visibleFilters ?? null;
-  const visibleKpis: KpiKey[] | null = viewConfig?.visibleKpis ?? null;
+  // "__ALL__" shows everything (no filtering).
+  const showingAll = activeConfig?.viewId === "__ALL__";
+  const visibleFilters: string[] | null = showingAll
+    ? null
+    : (activeConfig?.visibleFilters ?? null);
+  const visibleKpis: string[] | null = showingAll
+    ? null
+    : (activeConfig?.visibleKpis ?? null);
+
+  // The data source the active view was created from. Non-default sources
+  // (e.g. democatalog) render their own live KPIs instead of the workspace
+  // fact-table KPIs.
+  const activeSourceId = activeConfig?.sourceId ?? "databricks-default";
+  const isDefaultSource = activeSourceId === "databricks-default";
 
   /**
    * Fetch KPIs then immediately auto-generate AI insights with those values.
    * Sequential: insights depend on KPI values so they run after KPIs succeed.
    * Phase 1 (KPIs) sets its own loading/error; Phase 2 (insights) is independent.
+   *
+   * For non-default sources, KPIs come live from that source's adapter and the
+   * workspace-specific AI insights step is skipped.
    */
-  const fetchAll = useCallback(async (f: ExecFilters) => {
-    // ── Phase 1: KPIs ──────────────────────────────────────────────
+  const fetchAll = useCallback(async (f: ExecFilters, sourceId: string) => {
     setKpiLoading(true);
     setError(null);
 
+    // ── Non-default source: live KPIs from the source adapter ──────
+    if (sourceId !== "databricks-default") {
+      try {
+        const res = await enterpriseService.getSourceKpis(sourceId);
+        setKpis(
+          res.kpis.map((k) => ({
+            id: k.name,
+            label: k.name,
+            value: k.value,
+            numericValue: Number.parseFloat(k.value) || 0,
+            previousYearValue: 0,
+            yoyChangePercent: 0,
+            sublabel: sourceId,
+            valueColor: "default" as const,
+          })),
+        );
+        setLastUpdated(formatTimestamp());
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load KPIs.");
+      } finally {
+        setKpiLoading(false);
+      }
+      // Workspace AI insights don't apply to other sources.
+      setInsight(null);
+      setInsightLoading(false);
+      setInsightError(null);
+      return;
+    }
+
+    // ── Default source: workspace KPIs + AI insights ───────────────
     let fetchedKpis: KpiResult[] = [];
 
     try {
@@ -196,12 +295,12 @@ const ExecutiveSummaryPage: React.FC = () => {
     }
   }, []);
 
-  // Auto-load KPIs + insights on mount
+  // Auto-load KPIs + insights on mount and whenever the active source changes.
   useEffect(() => {
     if (!viewConfig) return; // no view selected — will redirect
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchAll(DEFAULT_FILTERS);
-  }, [fetchAll, viewConfig]);
+    fetchAll(DEFAULT_FILTERS, activeSourceId);
+  }, [fetchAll, viewConfig, activeSourceId]);
 
   const handleFilterChange = useCallback(
     (key: keyof ExecFilters, value: string) => {
@@ -211,27 +310,32 @@ const ExecutiveSummaryPage: React.FC = () => {
   );
 
   const handleApply = useCallback(() => {
-    fetchAll(filters);
-  }, [filters, fetchAll]);
+    fetchAll(filters, activeSourceId);
+  }, [filters, fetchAll, activeSourceId]);
 
   const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
-    fetchAll(DEFAULT_FILTERS);
-  }, [fetchAll]);
+    fetchAll(DEFAULT_FILTERS, activeSourceId);
+  }, [fetchAll, activeSourceId]);
 
   const handleDismissError = useCallback(() => setError(null), []);
-  const handleRetry = useCallback(() => fetchAll(filters), [filters, fetchAll]);
+  const handleRetry = useCallback(
+    () => fetchAll(filters, activeSourceId),
+    [filters, fetchAll, activeSourceId],
+  );
 
   // ── Derived visibility (based on the selected saved view) ─────────
   // Render only the keys listed in the view. (null only occurs when there is
   // no view config, in which case we redirect below before rendering.)
   const shownFilterDefs = visibleFilters
-    ? FILTER_DEFS.filter((def) => visibleFilters.includes(def.key as FilterKey))
+    ? FILTER_DEFS.filter((def) => visibleFilters.includes(def.key))
     : FILTER_DEFS;
 
   const shownKpis = visibleKpis
     ? kpis.filter((kpi) =>
-        visibleKpis.includes(kpiLabelToKey(kpi.label) as KpiKey),
+        isDefaultSource
+          ? visibleKpis.includes(kpiLabelToKey(kpi.label))
+          : visibleKpis.includes(kpi.label),
       )
     : kpis;
 
@@ -247,29 +351,63 @@ const ExecutiveSummaryPage: React.FC = () => {
       {/* Page header */}
       <DashboardHeader title="Executive Summary" timestamp={lastUpdated} />
 
-      {viewConfig.viewName && (
+      {/* Saved-view switcher — shows all of the user's saved views */}
+      {allViews.length > 0 && (
+        <div className={styles.viewChips}>
+          <span className={styles.viewChipStatic}>
+            All Views ({allViews.length})
+          </span>
+          {allViews.map((v) => (
+            <button
+              type="button"
+              key={v.viewId}
+              className={`${styles.viewChip} ${
+                activeConfig?.viewId === v.viewId ? styles.viewChipActive : ""
+              }`}
+              title={v.generatedViewName}
+              onClick={() =>
+                setActiveConfig({
+                  visibleFilters: v.visibleFilters,
+                  visibleKpis: v.visibleKpis,
+                  sourceId: v.sourceId,
+                  viewId: v.viewId,
+                  viewName: v.generatedViewName,
+                })
+              }
+            >
+              {v.sourceId} · {v.visibleKpis.length} KPIs ·{" "}
+              {v.visibleFilters.length} Filters
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeConfig?.viewName && (
         <span className={styles.viewCaption}>
-          Viewing saved view: {viewConfig.viewName}
+          Viewing saved view: {activeConfig.viewName} · source: {activeSourceId}
         </span>
       )}
 
-      {/* Filter bar — options sourced from FilterService */}
-      <FilterBar
-        activeCount={activeCount(filters)}
-        loading={kpiLoading}
-        onApply={handleApply}
-        onReset={handleReset}
-      >
-        {shownFilterDefs.map(({ key, label, optionsKey }) => (
-          <FilterDropdown
-            key={key}
-            label={label}
-            value={filters[key]}
-            options={filterOptionsLoading ? [] : filterOptions[optionsKey]}
-            onChange={(v) => handleFilterChange(key, v)}
-          />
-        ))}
-      </FilterBar>
+      {/* Filter bar — only the default (workspace) source is filter-driven */}
+      {isDefaultSource && (
+        <FilterBar
+          activeCount={activeCount(filters)}
+          loading={kpiLoading}
+          onApply={handleApply}
+          onReset={handleReset}
+        >
+          {shownFilterDefs.map(({ key, label, optionsKey }) => (
+            <FilterDropdown
+              key={key}
+              label={label}
+              value={filters[key]}
+              options={filterOptions[optionsKey]}
+              loading={filterOptionsLoading}
+              onChange={(v) => handleFilterChange(key, v)}
+            />
+          ))}
+        </FilterBar>
+      )}
 
       {/* Error banner — shown on API failure, dismissible with retry */}
       {error && (
@@ -300,12 +438,14 @@ const ExecutiveSummaryPage: React.FC = () => {
         ))}
       </KPIGrid>
 
-      {/* AI Insight Summary — auto-loaded; pure presentational */}
-      <InsightSummary
-        loading={insightLoading}
-        insight={insight}
-        error={insightError}
-      />
+      {/* AI Insight Summary — only for the workspace (default) source */}
+      {isDefaultSource && (
+        <InsightSummary
+          loading={insightLoading}
+          insight={insight}
+          error={insightError}
+        />
+      )}
     </div>
   );
 };

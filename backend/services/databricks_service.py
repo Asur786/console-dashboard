@@ -171,25 +171,25 @@ class DatabricksService:
     _FILTER_QUERIES: dict[str, str] = {
         "channels": (
             "SELECT DISTINCT GlobalChannel AS value "
-            "FROM marketdimension "
+            "FROM {market} "
             "WHERE GlobalChannel IS NOT NULL "
             "ORDER BY 1"
         ),
         "categories": (
             "SELECT DISTINCT Category AS value "
-            "FROM productdimension "
+            "FROM {product} "
             "WHERE Category IS NOT NULL "
             "ORDER BY 1"
         ),
         "retailers": (
             "SELECT DISTINCT GlobalRetailer AS value "
-            "FROM marketdimension "
+            "FROM {market} "
             "WHERE GlobalRetailer IS NOT NULL "
             "ORDER BY 1"
         ),
         "countries": (
             "SELECT DISTINCT Country AS value "
-            "FROM marketdimension "
+            "FROM {market} "
             "WHERE Country IS NOT NULL "
             "ORDER BY 1"
         ),
@@ -206,11 +206,16 @@ class DatabricksService:
         """
         Returns { channels: [...], categories: [...], retailers: [...], countries: [...] }.
         Each item is { "value": "...", "label": "..." }.
-        Source: marketdimension.GlobalChannel / productdimension.Category / etc.
+        Table names come from settings so they can be changed without code edits.
         """
         result: dict[str, list[dict[str, str]]] = {}
+        table_names = {
+            "market": settings.MARKET_DIM_TABLE,
+            "product": settings.PRODUCT_DIM_TABLE,
+        }
 
-        for key, sql in self._FILTER_QUERIES.items():
+        for key, sql_template in self._FILTER_QUERIES.items():
+            sql = sql_template.format(**table_names)
             rows = execute_query(sql)
             options: list[dict[str, str]] = [
                 {"value": "ALL", "label": self._ALL_LABELS[key]}
@@ -240,9 +245,9 @@ WITH filtered AS (
         SUM(f.PreviousYearVolumeSales) AS py_volume_sales,
         COUNT(DISTINCT CASE WHEN m.KPIIndicator = 1 THEN m.MarketId END)
             AS dist_present_markets
-    FROM r12mfact f
-    JOIN marketdimension m   ON f.MarketID  = m.MarketId
-    JOIN productdimension p  ON f.ProductID = p.ProductId
+    FROM {fact} f
+    JOIN {market} m   ON f.MarketID  = m.MarketId
+    JOIN {product} p  ON f.ProductID = p.ProductId
     WHERE (%(channel)s = 'ALL'  OR m.GlobalChannel  = %(channel)s)
       AND (%(category)s = 'ALL' OR p.Category       = %(category)s)
       AND (%(retailer)s = 'ALL' OR m.GlobalRetailer  = %(retailer)s)
@@ -253,9 +258,9 @@ total AS (
         SUM(f.CurrentYearDollarSales) AS total_cy_dollar_sales,
         SUM(f.CurrentYearVolumeSales) AS total_cy_volume_sales,
         COUNT(DISTINCT m.MarketId)    AS total_markets
-    FROM r12mfact f
-    JOIN marketdimension m   ON f.MarketID  = m.MarketId
-    JOIN productdimension p  ON f.ProductID = p.ProductId
+    FROM {fact} f
+    JOIN {market} m   ON f.MarketID  = m.MarketId
+    JOIN {product} p  ON f.ProductID = p.ProductId
 )
 SELECT
     filtered.cy_dollar_sales,
@@ -312,7 +317,12 @@ CROSS JOIN total
             "country": country,
         }
 
-        rows = execute_query(self._KPI_SQL, params)
+        sql = self._KPI_SQL.format(
+            fact=settings.KPI_FACT_TABLE,
+            market=settings.MARKET_DIM_TABLE,
+            product=settings.PRODUCT_DIM_TABLE,
+        )
+        rows = execute_query(sql, params)
 
         if not rows:
             return dict(self._EMPTY_KPIS)

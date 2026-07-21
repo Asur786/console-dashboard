@@ -68,6 +68,42 @@ class Settings:
     def ENTERPRISE_ENABLE_EXTERNAL_MOCK_SOURCE(self) -> bool:
         return os.getenv("ENTERPRISE_ENABLE_EXTERNAL_MOCK_SOURCE", "true").lower() == "true"
 
+    # POC 1: second real Databricks source (e.g. democatalog)
+    @property
+    def ENTERPRISE_ENABLE_SECONDARY_SOURCE(self) -> bool:
+        return os.getenv("ENTERPRISE_ENABLE_SECONDARY_SOURCE", "true").lower() == "true"
+
+    @property
+    def ENTERPRISE_SECONDARY_SOURCE_CATALOG(self) -> str:
+        return os.getenv("ENTERPRISE_SECONDARY_SOURCE_CATALOG", "democatalog")
+
+    @property
+    def ENTERPRISE_SECONDARY_SOURCE_SCHEMA(self) -> str:
+        return os.getenv("ENTERPRISE_SECONDARY_SOURCE_SCHEMA", "default")
+
+    # --- Physical table names (data model) — overridable per deployment ---
+    # Catalog/schema come from the settings above; only override these if your
+    # physical tables are named differently. No code change required.
+    @property
+    def KPI_FACT_TABLE(self) -> str:
+        return os.getenv("KPI_FACT_TABLE", "r12mfact")
+
+    @property
+    def MARKET_DIM_TABLE(self) -> str:
+        return os.getenv("MARKET_DIM_TABLE", "marketdimension")
+
+    @property
+    def PRODUCT_DIM_TABLE(self) -> str:
+        return os.getenv("PRODUCT_DIM_TABLE", "productdimension")
+
+    @property
+    def SECONDARY_KPI_TABLE(self) -> str:
+        return os.getenv("SECONDARY_KPI_TABLE", "kpi_summary")
+
+    @property
+    def SECONDARY_FILTER_TABLE(self) -> str:
+        return os.getenv("SECONDARY_FILTER_TABLE", "filter_region")
+
     @property
     def ENTERPRISE_WORKSPACE_POLICY(self) -> dict[str, dict[str, object]]:
         """
@@ -87,13 +123,18 @@ class Settings:
             except json.JSONDecodeError:
                 pass
 
-        # Safe default for local feasibility tests
+        # Safe default for local feasibility tests / demo (POC 2)
         return {
-            "workspace-default": {
-                "policy_id": "policy-default",
+            "workspace-a": {
+                "policy_id": "policy-a",
                 "catalogs": [self.DATABRICKS_CATALOG],
                 "schemas": [self.DATABRICKS_SCHEMA],
-            }
+            },
+            "workspace-b": {
+                "policy_id": "policy-b",
+                "catalogs": [self.ENTERPRISE_SECONDARY_SOURCE_CATALOG],
+                "schemas": [self.ENTERPRISE_SECONDARY_SOURCE_SCHEMA],
+            },
         }
 
     # --- App ---

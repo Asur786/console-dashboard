@@ -24,6 +24,15 @@ class DataSourceRegistry:
                 return source
         raise ValueError("No default source configured")
 
+    def get(self, source_id: str):
+        for source in self._sources:
+            if getattr(source, "source_id", None) == source_id:
+                return source
+        return None
+
+    def sources(self) -> list[object]:
+        return list(self._sources)
+
     def capabilities(self) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
         for source in self._sources:

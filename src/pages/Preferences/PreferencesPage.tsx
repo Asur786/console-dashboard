@@ -8,7 +8,6 @@ import {
   Switch,
   Spinner,
   Badge,
-  Input,
 } from "@fluentui/react-components";
 import {
   Save20Regular,
@@ -21,16 +20,12 @@ import {
   AVAILABLE_FILTERS,
   AVAILABLE_KPIS,
 } from "../../types/preference.types";
-import type {
-  FilterKey,
-  KpiKey,
-  SavedView,
-} from "../../types/preference.types";
+import type { SavedView } from "../../types/preference.types";
 import { preferenceService } from "../../services/preference.service";
 import { enterpriseService } from "../../services/enterprise.service";
 import { useOpenDashboard } from "../../hooks/useOpenDashboard";
 import { useAuthorization } from "../../hooks/useAuthorization";
-import type { ShareRecord, ShareRole } from "../../types/enterprise.types";
+import type { SourceCapability } from "../../types/enterprise.types";
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                            */
@@ -110,6 +105,23 @@ const useStyles = makeStyles({
   },
 
   /* -- Saved views grid --------------------------------------------- */
+  savedGroups: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
+  },
+  sourceGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  sourceGroupTitle: {
+    fontSize: tokens.fontSizeBase300,
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground2,
+    paddingBottom: "4px",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
   savedGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
@@ -169,25 +181,6 @@ const useStyles = makeStyles({
     color: tokens.colorStatusDangerForeground1,
     fontSize: tokens.fontSizeBase300,
   },
-  shareControls: {
-    display: "grid",
-    gridTemplateColumns: "2fr 2fr 1fr auto auto",
-    gap: "8px",
-    alignItems: "center",
-  },
-  shareList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-  },
-  shareItem: {
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusSmall,
-    padding: "8px 10px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   inlineHint: {
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase200,
@@ -197,17 +190,9 @@ const useStyles = makeStyles({
 /* ------------------------------------------------------------------ */
 /*  Helper — build the preview name (mirrors backend format)          */
 /* ------------------------------------------------------------------ */
-function buildPreviewName(filters: FilterKey[], kpis: KpiKey[]): string {
-  const filterLabels = filters.length
-    ? AVAILABLE_FILTERS.filter((f) => filters.includes(f.key))
-        .map((f) => f.label)
-        .join(", ")
-    : "All";
-  const kpiLabels = kpis.length
-    ? AVAILABLE_KPIS.filter((k) => kpis.includes(k.key))
-        .map((k) => k.label)
-        .join(", ")
-    : "All";
+function buildPreviewName(filters: string[], kpis: string[]): string {
+  const filterLabels = filters.length ? filters.join(", ") : "All";
+  const kpiLabels = kpis.length ? kpis.join(", ") : "All";
   return `Filters(${filterLabels}) | KPIs(${kpiLabels})`;
 }
 
@@ -220,21 +205,27 @@ const PreferencesPage: React.FC = () => {
   const authz = useAuthorization();
 
   // Selection state
-  const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
-  const [selectedKpis, setSelectedKpis] = useState<KpiKey[]>([]);
+  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [selectedKpis, setSelectedKpis] = useState<string[]>([]);
   const [makeDefault, setMakeDefault] = useState(false);
+
+  // Data source selection (POC 1: multiple data sources)
+  const [sources, setSources] = useState<SourceCapability[]>([]);
+  const [selectedSourceId, setSelectedSourceId] =
+    useState<string>("databricks-default");
+  const [sourceKpis, setSourceKpis] = useState<
+    { name: string; value: string }[]
+  >([]);
+  const [sourceFilters, setSourceFilters] = useState<string[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
 
   // Saved views state
   const [views, setViews] = useState<SavedView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shareResourceId, setShareResourceId] = useState("saved-view-demo");
-  const [shareTargetUser, setShareTargetUser] = useState("");
-  const [shareRole, setShareRole] = useState<ShareRole>("viewer");
-  const [shares, setShares] = useState<ShareRecord[]>([]);
-  const [sharesBusy, setSharesBusy] = useState(false);
 
   const previewName = useMemo(
     () => buildPreviewName(selectedFilters, selectedKpis),
@@ -257,19 +248,14 @@ const PreferencesPage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadViews();
-  }, [loadViews]);
-
   /* ---- Toggle helpers ---- */
-  const toggleFilter = useCallback((key: FilterKey, checked: boolean) => {
+  const toggleFilter = useCallback((key: string, checked: boolean) => {
     setSelectedFilters((prev) =>
       checked ? [...prev, key] : prev.filter((k) => k !== key),
     );
   }, []);
 
-  const toggleKpi = useCallback((key: KpiKey, checked: boolean) => {
+  const toggleKpi = useCallback((key: string, checked: boolean) => {
     setSelectedKpis((prev) =>
       checked ? [...prev, key] : prev.filter((k) => k !== key),
     );
@@ -280,15 +266,30 @@ const PreferencesPage: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
+      // Default source stores typed keys (channel/dollar_sales); other sources
+      // store their own KPI/filter names directly.
+      const isDefault = selectedSourceId === "databricks-default";
+      const visibleFilters = isDefault
+        ? AVAILABLE_FILTERS.filter((f) =>
+            selectedFilters.includes(f.label),
+          ).map((f) => f.key)
+        : selectedFilters;
+      const visibleKpis = isDefault
+        ? AVAILABLE_KPIS.filter((k) => selectedKpis.includes(k.label)).map(
+            (k) => k.key,
+          )
+        : selectedKpis;
       const created = await preferenceService.createView({
-        visibleFilters: selectedFilters,
-        visibleKpis: selectedKpis,
+        visibleFilters,
+        visibleKpis,
+        sourceId: selectedSourceId,
         isDefault: makeDefault,
       });
       // Navigate straight to the dashboard with the new view's configuration.
       openDashboard({
         visibleFilters: created.visibleFilters,
         visibleKpis: created.visibleKpis,
+        sourceId: created.sourceId,
         viewId: created.viewId,
         viewName: created.generatedViewName,
       });
@@ -296,7 +297,13 @@ const PreferencesPage: React.FC = () => {
       setError(err instanceof Error ? err.message : "Failed to save view.");
       setSaving(false); // stay on the page so the user can retry
     }
-  }, [selectedFilters, selectedKpis, makeDefault, openDashboard]);
+  }, [
+    selectedFilters,
+    selectedKpis,
+    selectedSourceId,
+    makeDefault,
+    openDashboard,
+  ]);
 
   /* ---- Open Dashboard: restore a saved view's configuration ---- */
   const handleOpenDashboard = useCallback(
@@ -304,6 +311,7 @@ const PreferencesPage: React.FC = () => {
       openDashboard({
         visibleFilters: view.visibleFilters,
         visibleKpis: view.visibleKpis,
+        sourceId: view.sourceId,
         viewId: view.viewId,
         viewName: view.generatedViewName,
       });
@@ -345,65 +353,110 @@ const PreferencesPage: React.FC = () => {
     [loadViews],
   );
 
+  const isDefaultSource = selectedSourceId === "databricks-default";
+
+  const loadSourceSchema = useCallback(async (sourceId: string) => {
+    if (sourceId === "databricks-default") {
+      setSourceFilters([]);
+      setSourceKpis([]);
+      return;
+    }
+    setSourceLoading(true);
+    setError(null);
+    try {
+      const [kpiRes, filterRes] = await Promise.all([
+        enterpriseService.getSourceKpis(sourceId),
+        enterpriseService.getSourceFilters(sourceId),
+      ]);
+      setSourceKpis(kpiRes.kpis);
+      setSourceFilters(filterRes.filters);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load source schema.",
+      );
+      setSourceKpis([]);
+      setSourceFilters([]);
+    } finally {
+      setSourceLoading(false);
+    }
+  }, []);
+
+  const loadSources = useCallback(async () => {
+    try {
+      const caps = await enterpriseService.getSourceCapabilities();
+      setSources(caps.sources);
+      // Only accessible sources are returned. If the current selection isn't
+      // among them, switch to the first available one and load its schema.
+      if (caps.sources.length > 0) {
+        const available = caps.sources.some(
+          (s) => s.sourceId === selectedSourceId,
+        );
+        if (!available) {
+          const first = caps.sources[0].sourceId;
+          setSelectedSourceId(first);
+          loadSourceSchema(first);
+        }
+      }
+    } catch {
+      // Non-fatal: keep the default source only.
+    }
+  }, [selectedSourceId, loadSourceSchema]);
+
+  useEffect(() => {
+    // Load everything this page needs before rendering, so the user sees a
+    // single loading state instead of a half-populated or error page.
+    (async () => {
+      await Promise.all([loadSources(), loadViews()]);
+      setInitializing(false);
+    })();
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSourceChange = useCallback(
+    (sourceId: string) => {
+      setSelectedSourceId(sourceId);
+      setSelectedFilters([]);
+      setSelectedKpis([]);
+      loadSourceSchema(sourceId);
+    },
+    [loadSourceSchema],
+  );
+
+  const filterOptions: string[] = isDefaultSource
+    ? AVAILABLE_FILTERS.map((f) => f.label)
+    : sourceFilters;
+
+  const kpiOptions: string[] = isDefaultSource
+    ? AVAILABLE_KPIS.map((k) => k.label)
+    : sourceKpis.map((k) => k.name);
+
   const canSave =
     (selectedFilters.length > 0 || selectedKpis.length > 0) &&
     authz.canWritePreferences;
 
-  const loadShares = useCallback(async () => {
-    if (!shareResourceId.trim()) return;
-    setSharesBusy(true);
-    setError(null);
-    try {
-      const result = await enterpriseService.listShares(shareResourceId.trim());
-      setShares(result);
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load sharing records.",
-      );
-    } finally {
-      setSharesBusy(false);
+  // Group saved views by the data source they were created from, so the UI
+  // can show "views saved from workspace" vs "views saved from democatalog".
+  const groupedViews = useMemo(() => {
+    const groups = new Map<string, SavedView[]>();
+    for (const view of views) {
+      const key = view.sourceId || "databricks-default";
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(view);
+      else groups.set(key, [view]);
     }
-  }, [shareResourceId]);
+    return Array.from(groups.entries());
+  }, [views]);
 
-  const handleCreateShare = useCallback(async () => {
-    if (!shareResourceId.trim() || !shareTargetUser.trim()) return;
-    setSharesBusy(true);
-    setError(null);
-    try {
-      await enterpriseService.createShare({
-        resourceId: shareResourceId.trim(),
-        resourceType: "saved_view",
-        sharedWithUserId: shareTargetUser.trim(),
-        shareRole,
-      });
-      setShareTargetUser("");
-      await loadShares();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create share.");
-      setSharesBusy(false);
-    }
-  }, [loadShares, shareResourceId, shareRole, shareTargetUser]);
-
-  const handleRevokeShare = useCallback(
-    async (sharedWithUserId: string) => {
-      if (!shareResourceId.trim()) return;
-      setSharesBusy(true);
-      setError(null);
-      try {
-        await enterpriseService.revokeShare(
-          shareResourceId.trim(),
-          sharedWithUserId,
-        );
-        await loadShares();
-      } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : "Failed to revoke share.",
-        );
-        setSharesBusy(false);
-      }
-    },
-    [loadShares, shareResourceId],
-  );
+  if (initializing) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.centeredState}>
+          <Spinner size="large" label="Loading your preferences…" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -422,39 +475,85 @@ const PreferencesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Section 0 — Data Source */}
+      <div className={styles.section}>
+        <Text className={styles.sectionTitle}>Data Source</Text>
+        <Text className={styles.inlineHint}>
+          Switch the active data source. Filters and KPIs update to reflect the
+          selected source.
+        </Text>
+        <select
+          value={selectedSourceId}
+          onChange={(e) => handleSourceChange(e.target.value)}
+          aria-label="Data source"
+        >
+          {sources.length === 0 && (
+            <option value="databricks-default">databricks-default</option>
+          )}
+          {sources.map((s) => (
+            <option key={s.sourceId} value={s.sourceId}>
+              {s.sourceId} ({s.sourceType})
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Section 1 — Available Filters */}
       <div className={styles.section}>
         <Text className={styles.sectionTitle}>Available Filters</Text>
-        <div className={styles.checkboxGrid}>
-          {AVAILABLE_FILTERS.map(({ key, label }) => (
-            <Checkbox
-              key={key}
-              label={label}
-              checked={selectedFilters.includes(key)}
-              onChange={(_, data) => toggleFilter(key, !!data.checked)}
-            />
-          ))}
-        </div>
+        {sourceLoading ? (
+          <Spinner size="tiny" label="Loading filters…" />
+        ) : (
+          <div className={styles.checkboxGrid}>
+            {filterOptions.map((label) => (
+              <Checkbox
+                key={label}
+                label={label}
+                checked={selectedFilters.includes(label)}
+                onChange={(_, data) => toggleFilter(label, !!data.checked)}
+              />
+            ))}
+            {filterOptions.length === 0 && (
+              <Text className={styles.inlineHint}>
+                No filters for this source.
+              </Text>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Section 2 — Available KPIs */}
       <div className={styles.section}>
         <Text className={styles.sectionTitle}>Available KPIs</Text>
-        <div className={styles.checkboxGrid}>
-          {AVAILABLE_KPIS.map(({ key, label }) => (
-            <Checkbox
-              key={key}
-              label={label}
-              checked={selectedKpis.includes(key)}
-              onChange={(_, data) => toggleKpi(key, !!data.checked)}
-            />
-          ))}
-        </div>
+        {sourceLoading ? (
+          <Spinner size="tiny" label="Loading KPIs…" />
+        ) : (
+          <div className={styles.checkboxGrid}>
+            {kpiOptions.map((label) => (
+              <Checkbox
+                key={label}
+                label={label}
+                checked={selectedKpis.includes(label)}
+                onChange={(_, data) => toggleKpi(label, !!data.checked)}
+              />
+            ))}
+            {kpiOptions.length === 0 && (
+              <Text className={styles.inlineHint}>
+                No KPIs for this source.
+              </Text>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Section 3 — Save View */}
       <div className={styles.section}>
         <Text className={styles.sectionTitle}>Save View</Text>
+        {!isDefaultSource && (
+          <Text className={styles.inlineHint}>
+            This view will be saved under the “{selectedSourceId}” data source.
+          </Text>
+        )}
         <div className={styles.saveRow}>
           <div className={styles.namePreview}>
             <Text className={styles.namePreviewLabel}>Generated name</Text>
@@ -478,80 +577,6 @@ const PreferencesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 4 — Saved Views */}
-      <div className={styles.section}>
-        <Text className={styles.sectionTitle}>
-          Sharing Controls (Feasibility)
-        </Text>
-        <Text className={styles.inlineHint}>
-          Minimal share/revoke controls to validate owner/editor/viewer
-          workflows.
-        </Text>
-
-        <div className={styles.shareControls}>
-          <Input
-            value={shareResourceId}
-            onChange={(_, data) => setShareResourceId(data.value)}
-            placeholder="Resource ID"
-          />
-          <Input
-            value={shareTargetUser}
-            onChange={(_, data) => setShareTargetUser(data.value)}
-            placeholder="User email to share with"
-          />
-          <select
-            value={shareRole}
-            onChange={(event) => setShareRole(event.target.value as ShareRole)}
-            aria-label="Share role"
-          >
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
-            <option value="owner">owner</option>
-          </select>
-          <Button
-            appearance="secondary"
-            onClick={loadShares}
-            disabled={sharesBusy || !authz.canShare}
-          >
-            Refresh Shares
-          </Button>
-          <Button
-            appearance="primary"
-            onClick={handleCreateShare}
-            disabled={sharesBusy || !shareTargetUser.trim() || !authz.canShare}
-          >
-            Share
-          </Button>
-        </div>
-
-        <div className={styles.shareList}>
-          {shares.map((item) => (
-            <div
-              key={`${item.resourceId}:${item.sharedWithUserId}`}
-              className={styles.shareItem}
-            >
-              <Text>
-                {item.sharedWithUserId} ({item.shareRole})
-              </Text>
-              <Button
-                size="small"
-                appearance="subtle"
-                icon={<Delete20Regular />}
-                onClick={() => handleRevokeShare(item.sharedWithUserId)}
-                disabled={sharesBusy || !authz.canShare}
-              >
-                Revoke
-              </Button>
-            </div>
-          ))}
-          {!sharesBusy && shares.length === 0 && (
-            <Text className={styles.inlineHint}>
-              No shares for the current resource.
-            </Text>
-          )}
-        </div>
-      </div>
-
       <div className={styles.section}>
         <Text className={styles.sectionTitle}>Saved Views</Text>
 
@@ -567,53 +592,68 @@ const PreferencesPage: React.FC = () => {
             </Text>
           </div>
         ) : (
-          <div className={styles.savedGrid}>
-            {views.map((view) => (
-              <div key={view.viewId} className={styles.viewCard}>
-                <div className={styles.viewCardHeader}>
-                  <Text className={styles.viewName}>
-                    {view.generatedViewName}
-                  </Text>
-                  {view.isDefault && (
-                    <Badge appearance="tint" color="brand" size="small">
-                      Default
-                    </Badge>
-                  )}
-                </div>
+          <div className={styles.savedGroups}>
+            {groupedViews.map(([sourceId, sourceViews]) => (
+              <div key={sourceId} className={styles.sourceGroup}>
+                <Text className={styles.sourceGroupTitle}>
+                  Saved from “{sourceId}” ({sourceViews.length})
+                </Text>
+                <div className={styles.savedGrid}>
+                  {sourceViews.map((view) => (
+                    <div key={view.viewId} className={styles.viewCard}>
+                      <div className={styles.viewCardHeader}>
+                        <Text className={styles.viewName}>
+                          {view.generatedViewName}
+                        </Text>
+                        {view.isDefault && (
+                          <Badge appearance="tint" color="brand" size="small">
+                            Default
+                          </Badge>
+                        )}
+                      </div>
 
-                <div className={styles.viewCardActions}>
-                  <Button
-                    size="small"
-                    appearance="primary"
-                    icon={<Open20Regular />}
-                    onClick={() => handleOpenDashboard(view)}
-                  >
-                    Open Dashboard
-                  </Button>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={view.isDefault ? <Star20Filled /> : <Star20Regular />}
-                    disabled={
-                      busyId === view.viewId ||
-                      view.isDefault ||
-                      !authz.canWritePreferences
-                    }
-                    onClick={() => handleSetDefault(view.viewId)}
-                  >
-                    Default
-                  </Button>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<Delete20Regular />}
-                    disabled={
-                      busyId === view.viewId || !authz.canWritePreferences
-                    }
-                    onClick={() => handleDelete(view.viewId)}
-                  >
-                    Delete
-                  </Button>
+                      <div className={styles.viewCardActions}>
+                        <Button
+                          size="small"
+                          appearance="primary"
+                          icon={<Open20Regular />}
+                          onClick={() => handleOpenDashboard(view)}
+                        >
+                          Open Dashboard
+                        </Button>
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          icon={
+                            view.isDefault ? (
+                              <Star20Filled />
+                            ) : (
+                              <Star20Regular />
+                            )
+                          }
+                          disabled={
+                            busyId === view.viewId ||
+                            view.isDefault ||
+                            !authz.canWritePreferences
+                          }
+                          onClick={() => handleSetDefault(view.viewId)}
+                        >
+                          Default
+                        </Button>
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          icon={<Delete20Regular />}
+                          disabled={
+                            busyId === view.viewId || !authz.canWritePreferences
+                          }
+                          onClick={() => handleDelete(view.viewId)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

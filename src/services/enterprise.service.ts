@@ -35,6 +35,14 @@ export const enterpriseService = {
     return request<SourceCapabilitiesResponse>(`${BASE}/sources/capabilities`);
   },
 
+  getSourceKpis(sourceId: string): Promise<{ sourceId: string; kpis: { name: string; value: string }[] }> {
+    return request(`${BASE}/sources/${sourceId}/kpis`);
+  },
+
+  getSourceFilters(sourceId: string): Promise<{ sourceId: string; filters: string[] }> {
+    return request(`${BASE}/sources/${sourceId}/filters`);
+  },
+
   validateWorkspaceAccess(payload: WorkspaceAccessRequest): Promise<WorkspaceAccessResponse> {
     return request<WorkspaceAccessResponse>(`${BASE}/workspaces/validate-access`, {
       method: 'POST',

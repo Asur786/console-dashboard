@@ -39,17 +39,21 @@ def _array_literal(values: list[str]) -> str:
     """
     Build a safe Spark SQL array literal, e.g. array('channel', 'category').
 
-    Each value must match _SAFE_VALUE (alphanumeric + underscore) — this
-    prevents SQL injection since array elements cannot be parameterised
-    with the DBAPI driver. Returns array() for an empty list.
+    Array elements cannot be parameterised with the DBAPI driver, so each value
+    is single-quote-escaped (SQL-standard doubling) to prevent injection.
+    Different data sources define their own KPI/filter names (which may contain
+    spaces or punctuation), so we allow any printable characters but reject
+    control characters and over-long values. Returns array() for an empty list.
     """
-    for v in values:
-        if not _SAFE_VALUE.match(v):
-            raise ValueError(f"Illegal array element value: {v!r}")
     if not values:
         return "array()"
-    quoted = ", ".join(f"'{v}'" for v in values)
-    return f"array({quoted})"
+    quoted: list[str] = []
+    for v in values:
+        s = str(v)
+        if len(s) > 100 or any(ord(c) < 32 for c in s):
+            raise ValueError(f"Illegal array element value: {v!r}")
+        quoted.append("'" + s.replace("'", "''") + "'")
+    return f"array({', '.join(quoted)})"
 
 
 def _iso(value: Any) -> Optional[str]:
@@ -87,6 +91,7 @@ def _row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
         "generated_view_name": row.get("generated_view_name"),
         "visible_filters":     _to_str_list(row.get("visible_filters")),
         "visible_kpis":        _to_str_list(row.get("visible_kpis")),
+        "source_id":           row.get("source_id") or "databricks-default",
         "is_default":          bool(row.get("is_default")),
         "created_at":          _iso(row.get("created_at")),
         "updated_at":          _iso(row.get("updated_at")),
@@ -155,6 +160,7 @@ class PreferenceRepository:
                   generated_view_name  STRING,
                   visible_filters      ARRAY<STRING>,
                   visible_kpis         ARRAY<STRING>,
+                  source_id            STRING,
                   is_default           BOOLEAN    NOT NULL,
                   created_at           TIMESTAMP  NOT NULL,
                   updated_at           TIMESTAMP  NOT NULL
@@ -170,6 +176,14 @@ class PreferenceRepository:
                   'delta.enableChangeDataFeed' = 'true'
                 )
             """)
+            # Backward-compatible: add source_id to tables created before this
+            # column existed. Databricks has no "ADD COLUMNS IF NOT EXISTS", so
+            # we check information_schema first to stay idempotent.
+            if not self._column_exists("source_id"):
+                execute_write(
+                    f"ALTER TABLE {_FULL_TABLE} ADD COLUMNS (source_id STRING)"
+                )
+                logger.info("Added source_id column to %s", _FULL_TABLE)
             if table_existed:
                 logger.info("Table already exists: %s", _FULL_TABLE)
             else:
@@ -235,6 +249,36 @@ class PreferenceRepository:
             logger.debug("Could not determine prior existence of %s", _FULL_TABLE)
             return False
 
+    @staticmethod
+    def _column_exists(column: str) -> bool:
+        """
+        Return True if the given column already exists on the target table.
+        Used to make the source_id migration idempotent (Databricks lacks
+        ADD COLUMNS IF NOT EXISTS).
+        """
+        try:
+            rows = execute_query(
+                """
+                SELECT 1 AS present
+                FROM information_schema.columns
+                WHERE table_catalog = %(cat)s
+                  AND table_schema  = %(sch)s
+                  AND table_name    = %(tbl)s
+                  AND column_name   = %(col)s
+                LIMIT 1
+                """,
+                {
+                    "cat": _PREF_CATALOG,
+                    "sch": _PREF_SCHEMA,
+                    "tbl": _PREF_TABLE,
+                    "col": column,
+                },
+            )
+            return bool(rows)
+        except Exception:
+            logger.debug("Could not determine existence of column %s", column)
+            return False
+
     # ------------------------------------------------------------------ #
     #  Read                                                               #
     # ------------------------------------------------------------------ #
@@ -243,7 +287,7 @@ class PreferenceRepository:
         """Return all views owned by a user, newest first."""
         sql = f"""
             SELECT view_id, user_id, generated_view_name,
-                   visible_filters, visible_kpis, is_default,
+                   visible_filters, visible_kpis, source_id, is_default,
                    created_at, updated_at
             FROM {_FULL_TABLE}
             WHERE user_id = %(user_id)s
@@ -256,7 +300,7 @@ class PreferenceRepository:
         """Return a single view scoped to the owning user, or None."""
         sql = f"""
             SELECT view_id, user_id, generated_view_name,
-                   visible_filters, visible_kpis, is_default,
+                   visible_filters, visible_kpis, source_id, is_default,
                    created_at, updated_at
             FROM {_FULL_TABLE}
             WHERE user_id = %(user_id)s AND view_id = %(view_id)s
@@ -277,6 +321,7 @@ class PreferenceRepository:
         view_name: str,
         visible_filters: list[str],
         visible_kpis: list[str],
+        source_id: str,
         is_default: bool,
     ) -> None:
         """Insert a new view row. Timestamps are set to current_timestamp()."""
@@ -286,17 +331,18 @@ class PreferenceRepository:
         sql = f"""
             INSERT INTO {_FULL_TABLE}
                 (user_id, view_id, generated_view_name,
-                 visible_filters, visible_kpis, is_default,
+                 visible_filters, visible_kpis, source_id, is_default,
                  created_at, updated_at)
             VALUES
                 (%(user_id)s, %(view_id)s, %(view_name)s,
-                 {filters_arr}, {kpis_arr}, %(is_default)s,
+                 {filters_arr}, {kpis_arr}, %(source_id)s, %(is_default)s,
                  current_timestamp(), current_timestamp())
         """
         execute_write(sql, {
             "user_id":    user_id,
             "view_id":    view_id,
             "view_name":  view_name,
+            "source_id":  source_id,
             "is_default": is_default,
         })
 

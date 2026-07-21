@@ -65,15 +65,20 @@ class SaveViewRequest(BaseModel):
             "isDefault": false
         }
     """
-    visible_filters: list[FilterKey] = Field(
+    visible_filters: list[str] = Field(
         alias="visibleFilters",
         default_factory=list,
         description="Filter dimension keys to show on the dashboard.",
     )
-    visible_kpis: list[KpiKey] = Field(
+    visible_kpis: list[str] = Field(
         alias="visibleKpis",
         default_factory=list,
         description="KPI card keys to show on the dashboard.",
+    )
+    source_id: str = Field(
+        alias="sourceId",
+        default="databricks-default",
+        description="The data source this view was configured from.",
     )
     is_default: bool = Field(
         alias="isDefault",
@@ -107,6 +112,7 @@ class UserPreferenceView(BaseModel):
     generated_view_name: str = Field(alias="generatedViewName")
     visible_filters: list[str] = Field(alias="visibleFilters")
     visible_kpis: list[str] = Field(alias="visibleKpis")
+    source_id: str = Field(alias="sourceId", default="databricks-default")
     is_default: bool = Field(alias="isDefault")
     created_at: Optional[str] = Field(alias="createdAt", default=None)
     updated_at: Optional[str] = Field(alias="updatedAt", default=None)

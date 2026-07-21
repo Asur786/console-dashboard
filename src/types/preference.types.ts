@@ -43,8 +43,9 @@ export const AVAILABLE_KPIS: ToggleOption<KpiKey>[] = [
 
 /** Request body for POST/PUT — no view name is ever sent. */
 export interface SaveViewPayload {
-  visibleFilters: FilterKey[];
-  visibleKpis: KpiKey[];
+  visibleFilters: string[];
+  visibleKpis: string[];
+  sourceId: string;
   isDefault: boolean;
 }
 
@@ -53,8 +54,9 @@ export interface SavedView {
   viewId: string;
   userId: string;
   generatedViewName: string;
-  visibleFilters: FilterKey[];
-  visibleKpis: KpiKey[];
+  visibleFilters: string[];
+  visibleKpis: string[];
+  sourceId: string;
   isDefault: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -71,8 +73,9 @@ export interface ViewListResponse {
  * should render (values are chosen on the dashboard itself, not here).
  */
 export interface DashboardViewConfig {
-  visibleFilters: FilterKey[];
-  visibleKpis: KpiKey[];
+  visibleFilters: string[];
+  visibleKpis: string[];
+  sourceId?: string;
   viewId?: string;
   viewName?: string;
 }

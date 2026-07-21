@@ -98,6 +98,7 @@ class PreferenceService:
             view_name=view_name,
             visible_filters=list(req.visible_filters),
             visible_kpis=list(req.visible_kpis),
+            source_id=req.source_id,
             is_default=req.is_default,
         )
 
@@ -201,6 +202,7 @@ class PreferenceService:
             generatedViewName=row["generated_view_name"],
             visibleFilters=row["visible_filters"],
             visibleKpis=row["visible_kpis"],
+            sourceId=row.get("source_id", "databricks-default"),
             isDefault=row["is_default"],
             createdAt=row.get("created_at"),
             updatedAt=row.get("updated_at"),

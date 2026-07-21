@@ -38,6 +38,46 @@ async def source_capabilities(profile: AccessProfile = Depends(get_access_profil
     return enterprise_service.source_capabilities(profile)
 
 
+@router.get(
+    "/enterprise/sources/{source_id}/kpis",
+    tags=["enterprise"],
+)
+async def source_kpis(
+    source_id: str,
+    profile: AccessProfile = Depends(get_access_profile),
+) -> dict:
+    enforce_roles(profile, "admin", "user")
+    try:
+        return enterprise_service.source_kpis(profile, source_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Source '{source_id}' KPI load failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/enterprise/sources/{source_id}/filters",
+    tags=["enterprise"],
+)
+async def source_filters(
+    source_id: str,
+    profile: AccessProfile = Depends(get_access_profile),
+) -> dict:
+    enforce_roles(profile, "admin", "user")
+    try:
+        return enterprise_service.source_filters(profile, source_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Source '{source_id}' filter load failed: {exc}",
+        ) from exc
+
+
 @router.post(
     "/enterprise/workspaces/validate-access",
     response_model=WorkspaceAccessResponse,

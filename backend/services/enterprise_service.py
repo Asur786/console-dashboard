@@ -32,9 +32,11 @@ from services.audit_log import (
 )
 from services.auth_context import AccessProfile
 from config.settings import settings
+from fastapi import HTTPException
+
 from services.data_source_registry import DataSourceRegistry
 from services.sources.databricks_source import DatabricksSourceAdapter
-from services.sources.external_mock_source import ExternalMockSourceAdapter
+from services.sources.secondary_databricks_source import SecondaryDatabricksSource
 from services.workspace_policy import WorkspacePolicyLoader, policy_allows
 
 
@@ -46,23 +48,82 @@ class EnterpriseService:
 
     @staticmethod
     def _source_registry() -> DataSourceRegistry:
-        sources = [DatabricksSourceAdapter()]
-        if settings.ENTERPRISE_ENABLE_EXTERNAL_MOCK_SOURCE:
-            sources.append(ExternalMockSourceAdapter(enabled=True))
+        sources: list[object] = [DatabricksSourceAdapter()]
+        if settings.ENTERPRISE_ENABLE_SECONDARY_SOURCE:
+            sources.append(SecondaryDatabricksSource())
         return DataSourceRegistry(sources=sources)
 
     def source_capabilities(self, profile: AccessProfile) -> SourceCapabilitiesResponse:
-        capabilities = self._source_registry().capabilities()
-        items = [SourceCapability(**item) for item in capabilities]
+        # Only advertise sources the current identity can actually read, so the
+        # UI never offers a data source that would fail with a permission error.
+        items: list[SourceCapability] = []
+        for source in self._source_registry().sources():
+            probe = getattr(source, "is_accessible", None)
+            if callable(probe) and not probe():
+                continue
+            items.append(
+                SourceCapability(
+                    sourceId=source.source_id,
+                    sourceType=source.source_type,
+                    isDefault=source.is_default,
+                    isActive=source.is_active,
+                    capabilities=list(source.capabilities),
+                )
+            )
 
         log_source_decision(
             user_id=profile.user_id,
-            source_id=items[0].source_id,
+            source_id=items[0].source_id if items else "none",
             workspace_id=None,
-            allowed=True,
+            allowed=bool(items),
             reason="capability_list",
         )
         return SourceCapabilitiesResponse(sources=items)
+
+    def source_kpis(self, profile: AccessProfile, source_id: str) -> dict[str, object]:
+        """Return live KPIs for a specific registered source (POC 1)."""
+        if source_id in ("databricks-default", "workspace", "source-a"):
+            from models.kpis import KpiFilters
+            from services.kpi_service import get_kpis
+
+            response = get_kpis(KpiFilters())
+            kpis = [{"name": item.label, "value": item.value} for item in response.kpis]
+            log_source_decision(
+                user_id=profile.user_id,
+                source_id="databricks-default",
+                workspace_id=None,
+                allowed=True,
+                reason="source_kpis",
+            )
+            return {"sourceId": "databricks-default", "kpis": kpis}
+
+        source = self._source_registry().get(source_id)
+        if source is None or not hasattr(source, "fetch_kpis"):
+            raise HTTPException(status_code=404, detail=f"Unknown source: {source_id}")
+
+        kpis = source.fetch_kpis()
+        log_source_decision(
+            user_id=profile.user_id,
+            source_id=source_id,
+            workspace_id=None,
+            allowed=True,
+            reason="source_kpis",
+        )
+        return {"sourceId": source_id, "kpis": kpis}
+
+    def source_filters(self, profile: AccessProfile, source_id: str) -> dict[str, object]:
+        """Return the available filter dimensions for a specific source (POC 1)."""
+        if source_id in ("databricks-default", "workspace", "source-a"):
+            return {
+                "sourceId": "databricks-default",
+                "filters": ["Channel", "Category", "Retailer", "Country"],
+            }
+
+        source = self._source_registry().get(source_id)
+        if source is None or not hasattr(source, "fetch_filters"):
+            raise HTTPException(status_code=404, detail=f"Unknown source: {source_id}")
+
+        return {"sourceId": source_id, "filters": source.fetch_filters()}
 
     def validate_workspace_access(
         self,
