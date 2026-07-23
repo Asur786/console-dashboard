@@ -5,46 +5,15 @@ Request:  SaveViewRequest
 Domain:   UserPreferenceView
 Response: ViewResponse, ViewListResponse
 
-Filter and KPI keys are constrained to known enums so the repository can
-safely build SQL array literals without risk of injection.
+Filter and KPI keys are free-form strings sourced dynamically from the config
+tables (filter dimensions + gold KPI list), so new filters/KPIs need no code
+change. Duplicate keys are removed before persisting.
 """
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional
 from pydantic import BaseModel, Field, field_validator
-
-# --------------------------------------------------------------------------- #
-#  Allowed keys — the single source of truth for what can be toggled          #
-# --------------------------------------------------------------------------- #
-
-FilterKey = Literal["channel", "category", "retailer", "country"]
-
-KpiKey = Literal[
-    "dollar_sales",
-    "volume_sales",
-    "dollar_share",
-    "volume_share",
-    "distribution",
-    "yoy_growth",
-]
-
-# Human-readable labels used when auto-generating the view name
-FILTER_LABELS: dict[str, str] = {
-    "channel":  "Channel",
-    "category": "Category",
-    "retailer": "Retailer",
-    "country":  "Country",
-}
-
-KPI_LABELS: dict[str, str] = {
-    "dollar_sales":  "Dollar Sales",
-    "volume_sales":  "Volume Sales",
-    "dollar_share":  "Dollar Share",
-    "volume_share":  "Volume Share",
-    "distribution":  "Distribution",
-    "yoy_growth":    "YoY Growth",
-}
 
 
 # --------------------------------------------------------------------------- #

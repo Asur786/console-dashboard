@@ -19,8 +19,6 @@ from typing import Optional
 from models.preference import (
     UserPreferenceView,
     SaveViewRequest,
-    FILTER_LABELS,
-    KPI_LABELS,
 )
 from repositories.preference_repository import preference_repository
 
@@ -35,6 +33,37 @@ class PreferenceService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
+    def _filter_label_map() -> dict[str, str]:
+        """Map filter dimension key → display label, from the config table."""
+        try:
+            from services import filter_config
+
+            return {
+                str(d["key"]): str(d.get("label", d["key"]))
+                for d in filter_config.get_dimensions()
+            }
+        except Exception:
+            logger.warning("Could not load filter labels for view name", exc_info=True)
+            return {}
+
+    @staticmethod
+    def _kpi_label_map() -> dict[str, str]:
+        """Map KPI key → display label, from the live gold KPI list.
+
+        Mirrors the /preferences/schema key form: name.lower().replace(" ", "_").
+        """
+        try:
+            from services.databricks_service import databricks_service
+
+            return {
+                n.lower().replace(" ", "_"): n
+                for n in databricks_service.get_gold_kpi_names()
+            }
+        except Exception:
+            logger.warning("Could not load KPI labels for view name", exc_info=True)
+            return {}
+
+    @staticmethod
     def generate_view_name(
         visible_filters: list[str],
         visible_kpis: list[str],
@@ -46,15 +75,18 @@ class PreferenceService:
         Example: "Filters(Channel, Category) | KPIs(Dollar Sales, YoY Growth, Distribution)"
 
         Uses "All" when a group is empty, e.g. "Filters(All)".
-        Labels come from FILTER_LABELS / KPI_LABELS so the output stays
-        human-readable and independent of the internal key names.
+        Labels are resolved dynamically from the filter-config table and the
+        live gold KPI list, so newly added filters/KPIs get pretty names too.
+        The raw key is used as a graceful fallback if a label is unavailable.
         """
+        filter_labels = PreferenceService._filter_label_map()
+        kpi_labels = PreferenceService._kpi_label_map()
         filter_part = (
-            ", ".join(FILTER_LABELS.get(f, f) for f in visible_filters)
+            ", ".join(filter_labels.get(f, f) for f in visible_filters)
             if visible_filters else "All"
         )
         kpi_part = (
-            ", ".join(KPI_LABELS.get(k, k) for k in visible_kpis)
+            ", ".join(kpi_labels.get(k, k) for k in visible_kpis)
             if visible_kpis else "All"
         )
         return f"Filters({filter_part}) | KPIs({kpi_part})"

@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ if str(_BACKEND_DIR) not in sys.path:
 from models.enterprise import WorkspaceAccessRequest
 from services.auth_context import AccessProfile
 from services.enterprise_service import enterprise_service
+from services import workspace_config
 
 
 def _profile() -> AccessProfile:
@@ -21,11 +21,20 @@ def _profile() -> AccessProfile:
     )
 
 
+# The workspace policy is table-driven (with env fallback); patch the resolved
+# policy map directly so these tests exercise the access-decision logic
+# deterministically, independent of any live config table.
+_POLICY = {
+    "workspace-a": {
+        "policy_id": "policy-001",
+        "catalogs": ["workspace"],
+        "schemas": ["default"],
+    }
+}
+
+
 def test_workspace_access_allows_when_policy_matches(monkeypatch) -> None:
-    monkeypatch.setenv(
-        "ENTERPRISE_WORKSPACE_POLICY",
-        '{"workspace-a":{"policy_id":"policy-001","catalogs":["workspace"],"schemas":["default"]}}',
-    )
+    monkeypatch.setattr(workspace_config, "get_policy_map", lambda: _POLICY)
 
     result = enterprise_service.validate_workspace_access(
         _profile(),
@@ -38,10 +47,7 @@ def test_workspace_access_allows_when_policy_matches(monkeypatch) -> None:
 
 
 def test_workspace_access_denies_when_workspace_not_allowlisted(monkeypatch) -> None:
-    monkeypatch.setenv(
-        "ENTERPRISE_WORKSPACE_POLICY",
-        '{"workspace-a":{"policy_id":"policy-001","catalogs":["workspace"],"schemas":["default"]}}',
-    )
+    monkeypatch.setattr(workspace_config, "get_policy_map", lambda: _POLICY)
 
     result = enterprise_service.validate_workspace_access(
         _profile(),
