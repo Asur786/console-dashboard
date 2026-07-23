@@ -1,14 +1,11 @@
 """
 Pydantic models for the /api/filters endpoint.
 
-Mirrors the frontend's FilterOption and DashboardFilterOptions types
-defined in src/types/filter.types.ts.
+Mirrors the frontend's FilterOption / FilterDimension types defined in
+src/types/filter.types.ts.
 
-Schema column mapping:
-  channels   → marketdimension.GlobalChannel
-  categories → productdimension.Category
-  retailers  → marketdimension.GlobalRetailer
-  countries  → marketdimension.Country
+The set of dimensions is config-driven (settings.FILTER_DIMENSIONS), so the
+response is a generic list of dimensions rather than fixed axes.
 """
 
 from pydantic import BaseModel
@@ -19,8 +16,11 @@ class FilterOption(BaseModel):
     label: str
 
 
+class FilterDimension(BaseModel):
+    key: str
+    label: str
+    options: list[FilterOption]
+
+
 class FiltersResponse(BaseModel):
-    channels: list[FilterOption]
-    categories: list[FilterOption]
-    retailers: list[FilterOption]
-    countries: list[FilterOption]
+    dimensions: list[FilterDimension]

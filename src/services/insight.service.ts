@@ -32,10 +32,11 @@ export const insightService = {
       kpiValues,
       // Only send filters that have a real value — omit ALL so backend
       // treats them as "no filter" and Prompt Builder skips them cleanly.
-      ...(filters.country  !== 'ALL' && { country:  filters.country  }),
-      ...(filters.channel  !== 'ALL' && { channel:  filters.channel  }),
-      ...(filters.category !== 'ALL' && { category: filters.category }),
-      ...(filters.retailer !== 'ALL' && { retailer: filters.retailer }),
+      // Sent generically by dimension key; the backend uses the ones it knows
+      // and ignores any it doesn't.
+      ...Object.fromEntries(
+        Object.entries(filters).filter(([, v]) => v && v !== 'ALL'),
+      ),
     };
 
     const response = await fetch('/api/insights', {

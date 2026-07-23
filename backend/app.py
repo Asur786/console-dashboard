@@ -69,6 +69,36 @@ async def lifespan(_app: FastAPI):
                 "will still start. If the table already exists, preference endpoints "
                 "remain fully functional."
             )
+        try:
+            logger.info("Ensuring filter-config table (manageable filter list)...")
+            from services import filter_config
+
+            filter_config.ensure_table()
+        except Exception:
+            logger.exception(
+                "Filter-config table init failed during startup — the app will "
+                "still start and fall back to the FILTER_DIMENSIONS defaults."
+            )
+        try:
+            logger.info("Ensuring source-config table (manageable data sources)...")
+            from services import source_config
+
+            source_config.ensure_table()
+        except Exception:
+            logger.exception(
+                "Source-config table init failed during startup — the app will "
+                "still start and fall back to the ENTERPRISE_DATA_SOURCES defaults."
+            )
+        try:
+            logger.info("Ensuring workspace-policy table (manageable workspaces)...")
+            from services import workspace_config
+
+            workspace_config.ensure_table()
+        except Exception:
+            logger.exception(
+                "Workspace-policy table init failed during startup — the app will "
+                "still start and fall back to the ENTERPRISE_WORKSPACE_POLICY defaults."
+            )
     else:
         logger.warning(
             "Databricks not configured — skipping preferences table initialization."

@@ -186,72 +186,54 @@ class DatabricksService:
     """All Databricks SQL logic lives here. Routes never see raw SQL."""
 
     # ------------------------------------------------------------------ #
-    #  Filters                                                            #
+    #  Filters (dimension-driven — see settings.FILTER_DIMENSIONS)         #
     # ------------------------------------------------------------------ #
 
-    _FILTER_QUERIES: dict[str, str] = {
-        "channels": (
-            "SELECT DISTINCT GlobalChannel AS value "
-            "FROM {market} "
-            "WHERE GlobalChannel IS NOT NULL "
-            "ORDER BY 1"
-        ),
-        "categories": (
-            "SELECT DISTINCT Category AS value "
-            "FROM {product} "
-            "WHERE Category IS NOT NULL "
-            "ORDER BY 1"
-        ),
-        "retailers": (
-            "SELECT DISTINCT GlobalRetailer AS value "
-            "FROM {market} "
-            "WHERE GlobalRetailer IS NOT NULL "
-            "ORDER BY 1"
-        ),
-        "countries": (
-            "SELECT DISTINCT Country AS value "
-            "FROM {market} "
-            "WHERE Country IS NOT NULL "
-            "ORDER BY 1"
-        ),
-    }
+    def _resolve_option_table(self, option_table: str) -> str:
+        """Map a logical option-table name to a physical table name."""
+        if option_table == "market":
+            return settings.MARKET_DIM_TABLE
+        if option_table == "product":
+            return settings.PRODUCT_DIM_TABLE
+        return option_table  # already a fully-qualified name
 
-    _ALL_LABELS: dict[str, str] = {
-        "channels": "All Channels",
-        "categories": "All Categories",
-        "retailers": "All Retailers",
-        "countries": "All Countries",
-    }
-
-    def get_filters(self) -> dict[str, list[dict[str, str]]]:
+    def get_filters(self) -> list[dict[str, Any]]:
         """
-        Returns { channels: [...], categories: [...], retailers: [...], countries: [...] }.
-        Each item is { "value": "...", "label": "..." }.
-        Table names come from settings so they can be changed without code edits.
-        """
-        result: dict[str, list[dict[str, str]]] = {}
-        table_names = {
-            "market": settings.MARKET_DIM_TABLE,
-            "product": settings.PRODUCT_DIM_TABLE,
-        }
+        Returns one entry per configured filter dimension:
+          [{ "key": "channel", "label": "Channel",
+             "options": [{ "value": "ALL", "label": "All" }, ...] }, ...]
 
-        for key, sql_template in self._FILTER_QUERIES.items():
-            sql = sql_template.format(**table_names)
+        Dimensions, their source tables and columns come from the manageable
+        filter-config table (with env/default fallback), so adding a filter
+        needs no code change.
+        """
+        from services import filter_config
+
+        dimensions: list[dict[str, Any]] = []
+        for dim in filter_config.get_dimensions():
+            key = str(dim["key"])
+            label = str(dim.get("label", key.title()))
+            table = self._resolve_option_table(str(dim["optionTable"]))
+            column = str(dim["optionColumn"])
+            sql = (
+                f"SELECT DISTINCT {column} AS value "
+                f"FROM {table} "
+                f"WHERE {column} IS NOT NULL "
+                f"ORDER BY 1"
+            )
             rows = execute_query(sql)
-            options: list[dict[str, str]] = [
-                {"value": "ALL", "label": self._ALL_LABELS[key]}
-            ]
+            options: list[dict[str, str]] = [{"value": "ALL", "label": "All"}]
             for row in rows:
                 val = str(row["value"]).strip()
                 if val:
                     options.append({"value": val, "label": val})
-            result[key] = options
+            dimensions.append({"key": key, "label": label, "options": options})
 
         logger.info(
             "Loaded filters from Databricks: %s",
-            {k: len(v) for k, v in result.items()},
+            {d["key"]: len(d["options"]) for d in dimensions},
         )
-        return result
+        return dimensions
 
     # ------------------------------------------------------------------ #
     #  Performance Summary KPIs                                           #
@@ -350,6 +332,69 @@ CROSS JOIN total
 
         row = rows[0]
         return {k: float(v) if v is not None else 0.0 for k, v in row.items()}
+
+    # ------------------------------------------------------------------ #
+    #  Gold KPI layer (table-driven, fully dynamic KPIs)                 #
+    # ------------------------------------------------------------------ #
+    def get_gold_kpis(
+        self,
+        filters: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read KPIs directly from the gold KPI summary table.
+
+        Fully dynamic: whatever KPI rows exist in the table are returned, so
+        adding/removing a KPI needs no code change. Filtering is driven by the
+        manageable filter-config table — each dimension maps to a gold column
+        and uses the convention that a NULL dimension in the table means "ALL";
+        picking a value matches that dimension, and 'ALL' matches the NULL
+        (pre-aggregated) rows.
+        """
+        from services import filter_config
+
+        filters = filters or {}
+        table = (
+            f"{settings.GOLD_CATALOG}.{settings.GOLD_SCHEMA}.{settings.GOLD_KPI_TABLE}"
+        )
+
+        where_clauses: list[str] = []
+        params: dict[str, str] = {}
+        for dim in filter_config.get_dimensions():
+            key = str(dim["key"])
+            gold_col = str(dim["goldColumn"])
+            value = filters.get(key, "ALL") or "ALL"
+            params[key] = value
+            where_clauses.append(
+                f"(CASE WHEN %({key})s = 'ALL' THEN {gold_col} IS NULL "
+                f"ELSE {gold_col} = %({key})s END)"
+            )
+
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        sql = f"""
+            SELECT kpi_name,
+                   ANY_VALUE(unit_of_measure)    AS unit_of_measure,
+                   ANY_VALUE(current_year_value) AS current_year_value,
+                   ANY_VALUE(previous_year_value) AS previous_year_value,
+                   ANY_VALUE(yoy_growth_pct)     AS yoy_growth_pct,
+                   ANY_VALUE(share_pct)          AS share_pct,
+                   ANY_VALUE(trend_indicator)    AS trend_indicator,
+                   ANY_VALUE(kpi_id)             AS kpi_id
+            FROM {table}
+            WHERE {where_sql}
+            GROUP BY kpi_name
+            ORDER BY kpi_name
+        """
+        return execute_query(sql, params)
+
+    def get_gold_kpi_names(self) -> list[str]:
+        """Distinct KPI names from the gold KPI table (for dynamic checklists)."""
+        table = (
+            f"{settings.GOLD_CATALOG}.{settings.GOLD_SCHEMA}.{settings.GOLD_KPI_TABLE}"
+        )
+        rows = execute_query(
+            f"SELECT DISTINCT kpi_name FROM {table} "
+            f"WHERE kpi_name IS NOT NULL ORDER BY kpi_name"
+        )
+        return [str(r.get("kpi_name")) for r in rows]
 
 
 # Module-level singleton

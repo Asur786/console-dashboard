@@ -1,54 +1,38 @@
 import { useState, useEffect } from 'react';
 import { filterService } from '../services/filter.service';
-import type { DashboardFilterOptions, FilterOption } from '../types/filter.types';
-
-const EMPTY: DashboardFilterOptions = {
-  channels:   [],
-  categories: [],
-  retailers:  [],
-  countries:  [],
-};
+import type { FilterDimension } from '../types/filter.types';
 
 interface UseFiltersResult {
-  filterOptions: DashboardFilterOptions;
+  /** Config-driven filter dimensions (from settings.FILTER_DIMENSIONS). */
+  dimensions: FilterDimension[];
   filterOptionsLoading: boolean;
 }
 
 /**
- * Loads all filter dimension values from FilterService in parallel.
- * The returned options are ready to pass directly to <FilterDropdown>.
+ * Loads the config-driven filter dimensions from FilterService.
+ * Each dimension carries its own options, ready to render generically.
  */
 export function useFilters(): UseFiltersResult {
-  const [options, setOptions]   = useState<DashboardFilterOptions>(EMPTY);
-  const [loading, setLoading]   = useState(true);
+  const [dimensions, setDimensions] = useState<FilterDimension[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadFilters = async () => {
       try {
-        const [channels, categories, retailers, countries] = await Promise.all<FilterOption[]>([
-          filterService.getChannels(),
-          filterService.getCategories(),
-          filterService.getRetailers(),
-          filterService.getCountries(),
-        ]);
+        const dims = await filterService.getDimensions();
         if (!cancelled) {
-          setOptions({ channels, categories, retailers, countries });
+          setDimensions(dims);
           setLoading(false);
         }
       } catch {
         // If first load fails (cold start), retry once after a short delay
         if (!cancelled) {
           try {
-            const [channels, categories, retailers, countries] = await Promise.all<FilterOption[]>([
-              filterService.getChannels(),
-              filterService.getCategories(),
-              filterService.getRetailers(),
-              filterService.getCountries(),
-            ]);
+            const dims = await filterService.getDimensions();
             if (!cancelled) {
-              setOptions({ channels, categories, retailers, countries });
+              setDimensions(dims);
               setLoading(false);
             }
           } catch {
@@ -64,5 +48,5 @@ export function useFilters(): UseFiltersResult {
     return () => { cancelled = true; };
   }, []);
 
-  return { filterOptions: options, filterOptionsLoading: loading };
+  return { dimensions, filterOptionsLoading: loading };
 }

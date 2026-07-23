@@ -31,12 +31,11 @@ from services.audit_log import (
     log_workspace_access,
 )
 from services.auth_context import AccessProfile
-from config.settings import settings
 from fastapi import HTTPException
 
 from services.data_source_registry import DataSourceRegistry
 from services.sources.databricks_source import DatabricksSourceAdapter
-from services.sources.secondary_databricks_source import SecondaryDatabricksSource
+from services.sources.configurable_databricks_source import ConfigurableDatabricksSource
 from services.workspace_policy import WorkspacePolicyLoader, policy_allows
 
 
@@ -48,9 +47,14 @@ class EnterpriseService:
 
     @staticmethod
     def _source_registry() -> DataSourceRegistry:
+        # The default (computed) source, plus any config-driven sources managed
+        # in the source-config Delta table (falling back to the env/default list
+        # via source_config) — adding a source needs no code or redeploy.
+        from services import source_config
+
         sources: list[object] = [DatabricksSourceAdapter()]
-        if settings.ENTERPRISE_ENABLE_SECONDARY_SOURCE:
-            sources.append(SecondaryDatabricksSource())
+        for cfg in source_config.get_sources():
+            sources.append(ConfigurableDatabricksSource(cfg))
         return DataSourceRegistry(sources=sources)
 
     def source_capabilities(self, profile: AccessProfile) -> SourceCapabilitiesResponse:
@@ -114,9 +118,14 @@ class EnterpriseService:
     def source_filters(self, profile: AccessProfile, source_id: str) -> dict[str, object]:
         """Return the available filter dimensions for a specific source (POC 1)."""
         if source_id in ("databricks-default", "workspace", "source-a"):
+            # Filters come from the manageable filter-config table (table-driven,
+            # cached, env fallback) — never a hardcoded list.
+            from services import filter_config
+
+            labels = [str(dim.get("label") or dim["key"]) for dim in filter_config.get_dimensions()]
             return {
                 "sourceId": "databricks-default",
-                "filters": ["Channel", "Category", "Retailer", "Country"],
+                "filters": labels,
             }
 
         source = self._source_registry().get(source_id)

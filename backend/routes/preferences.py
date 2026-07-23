@@ -87,6 +87,43 @@ async def list_views(
 
 
 # --------------------------------------------------------------------------- #
+#  GET — dynamic schema (filters + KPIs available for the default source)      #
+# --------------------------------------------------------------------------- #
+
+@router.get(
+    "/preferences/schema",
+    summary="Dynamic list of filters and KPIs available for saved views",
+    tags=["preferences"],
+)
+async def get_schema(
+    profile: AccessProfile = Depends(get_access_profile),
+) -> dict:
+    """Return the available filters and KPIs so the UI never hardcodes them.
+
+    KPIs are read live from the gold KPI table (fully dynamic — add a KPI row
+    in Databricks and it appears here). Filters map to the dashboard's
+    dimension columns.
+    """
+    enforce_roles(profile, "admin", "user")
+    from services.databricks_service import databricks_service
+
+    try:
+        kpi_names = databricks_service.get_gold_kpi_names()
+    except Exception:
+        logger.exception("Failed to load dynamic KPI list from gold table")
+        kpi_names = []
+
+    kpis = [{"key": n.lower().replace(" ", "_"), "label": n} for n in kpi_names]
+    from services import filter_config
+
+    filters = [
+        {"key": str(dim["key"]), "label": str(dim.get("label", dim["key"]))}
+        for dim in filter_config.get_dimensions()
+    ]
+    return {"filters": filters, "kpis": kpis}
+
+
+# --------------------------------------------------------------------------- #
 #  POST — create                                                              #
 # --------------------------------------------------------------------------- #
 

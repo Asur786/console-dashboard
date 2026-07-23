@@ -26,13 +26,8 @@
  * ───────────────────────────────────────────────────────────────────────
  */
 
-/** The filter payload sent to the service. */
-export interface KpiFilters {
-  channel: string;   // 'ALL' | marketdimension.GlobalChannel
-  category: string;  // 'ALL' | productdimension.Category
-  retailer: string;  // 'ALL' | marketdimension.GlobalRetailer
-  country: string;   // 'ALL' | marketdimension.Country
-}
+/** The filter payload sent to the service — keyed by dimension key. */
+export type KpiFilters = Record<string, string>;
 
 /** A single KPI metric returned by the service. */
 export interface KpiResult {

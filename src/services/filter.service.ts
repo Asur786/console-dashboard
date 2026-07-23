@@ -1,23 +1,16 @@
-import type { FilterOption } from '../types/filter.types';
+import type { FilterDimension } from '../types/filter.types';
 
 /**
  * FilterService
  *
- * Fetches distinct dimension values from the FastAPI backend.
- * GET /api/filters returns all four axes in one response.
- *
- * Schema column mapping (executed server-side):
- *   channels   → SELECT DISTINCT GlobalChannel  FROM marketdimension
- *   categories → SELECT DISTINCT Category       FROM productdimension
- *   retailers  → SELECT DISTINCT GlobalRetailer  FROM marketdimension
- *   countries  → SELECT DISTINCT Country         FROM marketdimension
+ * Fetches the config-driven filter dimensions from the FastAPI backend.
+ * GET /api/filters returns every dimension defined in settings.FILTER_DIMENSIONS
+ * along with its distinct option values — so adding a filter needs no frontend
+ * code change.
  */
 
 interface ApiFiltersResponse {
-  channels: FilterOption[];
-  categories: FilterOption[];
-  retailers: FilterOption[];
-  countries: FilterOption[];
+  dimensions: FilterDimension[];
 }
 
 /** Cached result — filters don't change during a session */
@@ -64,23 +57,9 @@ async function fetchAll(): Promise<ApiFiltersResponse> {
 }
 
 export const filterService = {
-  async getChannels(): Promise<FilterOption[]> {
+  /** All configured filter dimensions with their selectable options. */
+  async getDimensions(): Promise<FilterDimension[]> {
     const data = await fetchAll();
-    return data.channels;
-  },
-
-  async getCategories(): Promise<FilterOption[]> {
-    const data = await fetchAll();
-    return data.categories;
-  },
-
-  async getRetailers(): Promise<FilterOption[]> {
-    const data = await fetchAll();
-    return data.retailers;
-  },
-
-  async getCountries(): Promise<FilterOption[]> {
-    const data = await fetchAll();
-    return data.countries;
+    return data.dimensions;
   },
 };

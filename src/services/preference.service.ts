@@ -46,6 +46,14 @@ export const preferenceService = {
     return data.views;
   },
 
+  /** Dynamic list of filters + KPIs available for the default source. */
+  async getSchema(): Promise<{
+    filters: { key: string; label: string }[];
+    kpis: { key: string; label: string }[];
+  }> {
+    return request('/api/preferences/schema');
+  },
+
   /** Create a new saved view. Backend auto-generates the name. */
   async createView(payload: SaveViewPayload): Promise<SavedView> {
     return request<SavedView>(BASE, {

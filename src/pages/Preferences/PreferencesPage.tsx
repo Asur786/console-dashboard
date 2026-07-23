@@ -16,10 +16,6 @@ import {
   Star20Regular,
   Open20Regular,
 } from "@fluentui/react-icons";
-import {
-  AVAILABLE_FILTERS,
-  AVAILABLE_KPIS,
-} from "../../types/preference.types";
 import type { SavedView } from "../../types/preference.types";
 import { preferenceService } from "../../services/preference.service";
 import { enterpriseService } from "../../services/enterprise.service";
@@ -219,6 +215,15 @@ const PreferencesPage: React.FC = () => {
   const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [sourceLoading, setSourceLoading] = useState(false);
 
+  // Dynamic default-source schema (filters + KPIs), fetched from the backend
+  // so the lists are never hardcoded in the frontend.
+  const [schemaFilters, setSchemaFilters] = useState<
+    { key: string; label: string }[]
+  >([]);
+  const [schemaKpis, setSchemaKpis] = useState<
+    { key: string; label: string }[]
+  >([]);
+
   // Saved views state
   const [views, setViews] = useState<SavedView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -270,12 +275,12 @@ const PreferencesPage: React.FC = () => {
       // store their own KPI/filter names directly.
       const isDefault = selectedSourceId === "databricks-default";
       const visibleFilters = isDefault
-        ? AVAILABLE_FILTERS.filter((f) =>
+        ? schemaFilters.filter((f) =>
             selectedFilters.includes(f.label),
           ).map((f) => f.key)
         : selectedFilters;
       const visibleKpis = isDefault
-        ? AVAILABLE_KPIS.filter((k) => selectedKpis.includes(k.label)).map(
+        ? schemaKpis.filter((k) => selectedKpis.includes(k.label)).map(
             (k) => k.key,
           )
         : selectedKpis;
@@ -301,6 +306,8 @@ const PreferencesPage: React.FC = () => {
     selectedFilters,
     selectedKpis,
     selectedSourceId,
+    schemaFilters,
+    schemaKpis,
     makeDefault,
     openDashboard,
   ]);
@@ -402,11 +409,21 @@ const PreferencesPage: React.FC = () => {
     }
   }, [selectedSourceId, loadSourceSchema]);
 
+  const loadSchema = useCallback(async () => {
+    try {
+      const schema = await preferenceService.getSchema();
+      setSchemaFilters(schema.filters);
+      setSchemaKpis(schema.kpis);
+    } catch {
+      // Non-fatal: leave lists empty if the schema can't be loaded.
+    }
+  }, []);
+
   useEffect(() => {
     // Load everything this page needs before rendering, so the user sees a
     // single loading state instead of a half-populated or error page.
     (async () => {
-      await Promise.all([loadSources(), loadViews()]);
+      await Promise.all([loadSources(), loadViews(), loadSchema()]);
       setInitializing(false);
     })();
     // Run once on mount.
@@ -424,11 +441,11 @@ const PreferencesPage: React.FC = () => {
   );
 
   const filterOptions: string[] = isDefaultSource
-    ? AVAILABLE_FILTERS.map((f) => f.label)
+    ? schemaFilters.map((f) => f.label)
     : sourceFilters;
 
   const kpiOptions: string[] = isDefaultSource
-    ? AVAILABLE_KPIS.map((k) => k.label)
+    ? schemaKpis.map((k) => k.label)
     : sourceKpis.map((k) => k.name);
 
   const canSave =

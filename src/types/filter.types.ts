@@ -4,10 +4,9 @@ export interface FilterOption {
   label: string;
 }
 
-/** Aggregated options for all four dashboard filter axes. */
-export interface DashboardFilterOptions {
-  channels: FilterOption[];
-  categories: FilterOption[];
-  retailers: FilterOption[];
-  countries: FilterOption[];
+/** One filter dimension (config-driven) with its selectable options. */
+export interface FilterDimension {
+  key: string;
+  label: string;
+  options: FilterOption[];
 }

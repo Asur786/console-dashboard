@@ -3,12 +3,8 @@ export interface ExecFilterOption {
   label: string;
 }
 
-export interface ExecFilters {
-  channel: string;
-  category: string;
-  retailer: string;
-  country: string;
-}
+/** Selected filter values keyed by dimension key (config-driven). */
+export type ExecFilters = Record<string, string>;
 
 export interface ExecKpi {
   id: string;
@@ -16,11 +12,4 @@ export interface ExecKpi {
   value: string;
   sublabel: string;
   valueColor?: 'default' | 'green' | 'red';
-}
-
-export interface ExecFilterOptions {
-  channels: ExecFilterOption[];
-  categories: ExecFilterOption[];
-  retailers: ExecFilterOption[];
-  countries: ExecFilterOption[];
 }

@@ -1,13 +1,15 @@
 """
 GET /api/kpis
 
-Returns the five Performance Summary KPI metrics.
-Accepts optional query parameters: channel, category, retailer, country.
+Returns the Performance Summary KPI metrics from the gold KPI table.
+Accepts any configured filter dimension as an optional query parameter
+(e.g. channel, category, retailer, country, or any custom dimension defined
+in settings.FILTER_DIMENSIONS).
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Request
 from models.kpis import KpiFilters, KpisResponse
 from services.kpi_service import get_kpis
 
@@ -16,18 +18,15 @@ router = APIRouter()
 
 
 @router.get("/kpis", response_model=KpisResponse)
-async def kpis_endpoint(
-    channel: str = Query("ALL", description="marketdimension.GlobalChannel"),
-    category: str = Query("ALL", description="productdimension.Category"),
-    retailer: str = Query("ALL", description="marketdimension.GlobalRetailer"),
-    country: str = Query("ALL", description="marketdimension.Country"),
-) -> KpisResponse:
-    filters = KpiFilters(
-        channel=channel,
-        category=category,
-        retailer=retailer,
-        country=country,
-    )
+async def kpis_endpoint(request: Request) -> KpisResponse:
+    # Any query param is treated as a filter dimension value. 'ALL' (or a
+    # missing param) means "no filter" for that dimension.
+    selected = {
+        key: value
+        for key, value in request.query_params.items()
+        if value and value != "ALL"
+    }
+    filters = KpiFilters(filters=selected)
     try:
         return get_kpis(filters)
     except Exception as exc:

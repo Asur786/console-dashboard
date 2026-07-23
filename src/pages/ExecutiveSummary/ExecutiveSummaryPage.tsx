@@ -17,7 +17,6 @@ import { preferenceService } from "../../services/preference.service";
 import { enterpriseService } from "../../services/enterprise.service";
 import { ROUTES } from "../../constants/routes";
 import type { ExecFilters } from "../../types/executive.types";
-import type { DashboardFilterOptions } from "../../types/filter.types";
 import type { SavedView } from "../../types/preference.types";
 import type { KpiResult } from "../../types/kpi.types";
 import type { InsightResponse } from "../../types/insight.types";
@@ -87,15 +86,12 @@ const useStyles = makeStyles({
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
-const DEFAULT_FILTERS: ExecFilters = {
-  channel: "ALL",
-  category: "ALL",
-  retailer: "ALL",
-  country: "ALL",
-};
+// Empty = every dimension at "ALL" (no filter). Filters are keyed by the
+// config-driven dimension keys loaded at runtime.
+const DEFAULT_FILTERS: ExecFilters = {};
 
 function activeCount(f: ExecFilters): number {
-  return Object.values(f).filter((v) => v !== "ALL").length;
+  return Object.values(f).filter((v) => v && v !== "ALL").length;
 }
 
 function formatTimestamp(): string {
@@ -116,27 +112,13 @@ function formatTimestamp(): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Filter config — maps ExecFilters keys to DashboardFilterOptions   */
-/* ------------------------------------------------------------------ */
-const FILTER_DEFS: {
-  key: keyof ExecFilters;
-  label: string;
-  optionsKey: keyof DashboardFilterOptions;
-}[] = [
-  { key: "channel", label: "Channel", optionsKey: "channels" },
-  { key: "category", label: "Category", optionsKey: "categories" },
-  { key: "retailer", label: "Retailer", optionsKey: "retailers" },
-  { key: "country", label: "Country", optionsKey: "countries" },
-];
-
-/* ------------------------------------------------------------------ */
 /*  Saved View integration helpers                                    */
 /* ------------------------------------------------------------------ */
 
 /**
  * Normalise a KPI display label to its preference key form.
  * "Dollar Sales" → "dollar_sales", "YoY Growth" → "yoy_growth".
- * Lets us match KpiResult.label against SavedView.visibleKpis (KpiKey[]).
+ * Lets us match KpiResult.label against SavedView.visibleKpis.
  */
 function kpiLabelToKey(label: string): string {
   return label.toLowerCase().replace(/\s+/g, "_");
@@ -154,8 +136,8 @@ const ExecutiveSummaryPage: React.FC = () => {
   const location = useLocation();
   const viewConfig = (location.state as DashboardViewConfig | null) ?? null;
 
-  // Filter options loaded from FilterService (schema-driven)
-  const { filterOptions, filterOptionsLoading } = useFilters();
+  // Filter dimensions loaded from FilterService (config-driven schema)
+  const { dimensions, filterOptionsLoading } = useFilters();
 
   const [filters, setFilters] = useState<ExecFilters>(DEFAULT_FILTERS);
   const [kpis, setKpis] = useState<KpiResult[]>([]);
@@ -303,7 +285,7 @@ const ExecutiveSummaryPage: React.FC = () => {
   }, [fetchAll, viewConfig, activeSourceId]);
 
   const handleFilterChange = useCallback(
-    (key: keyof ExecFilters, value: string) => {
+    (key: string, value: string) => {
       setFilters((prev) => ({ ...prev, [key]: value }));
     },
     [],
@@ -325,11 +307,11 @@ const ExecutiveSummaryPage: React.FC = () => {
   );
 
   // ── Derived visibility (based on the selected saved view) ─────────
-  // Render only the keys listed in the view. (null only occurs when there is
-  // no view config, in which case we redirect below before rendering.)
-  const shownFilterDefs = visibleFilters
-    ? FILTER_DEFS.filter((def) => visibleFilters.includes(def.key))
-    : FILTER_DEFS;
+  // Render only the dimensions listed in the view. (null only occurs when
+  // there is no view config, in which case we redirect below before rendering.)
+  const shownDimensions = visibleFilters
+    ? dimensions.filter((dim) => visibleFilters.includes(dim.key))
+    : dimensions;
 
   const shownKpis = visibleKpis
     ? kpis.filter((kpi) =>
@@ -396,14 +378,14 @@ const ExecutiveSummaryPage: React.FC = () => {
           onApply={handleApply}
           onReset={handleReset}
         >
-          {shownFilterDefs.map(({ key, label, optionsKey }) => (
+          {shownDimensions.map((dim) => (
             <FilterDropdown
-              key={key}
-              label={label}
-              value={filters[key]}
-              options={filterOptions[optionsKey]}
+              key={dim.key}
+              label={dim.label}
+              value={filters[dim.key] ?? "ALL"}
+              options={dim.options}
               loading={filterOptionsLoading}
-              onChange={(v) => handleFilterChange(key, v)}
+              onChange={(v) => handleFilterChange(dim.key, v)}
             />
           ))}
         </FilterBar>

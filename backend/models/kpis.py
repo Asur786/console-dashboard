@@ -12,16 +12,17 @@ Schema column mapping (fact tables → KPIs):
   YoY Growth    → (CY$ − PY$) / PY$ × 100
 """
 
-from typing import Literal, Optional
+from typing import Literal
 from pydantic import BaseModel
 
 
 class KpiFilters(BaseModel):
-    """Query parameters for the KPI endpoint."""
-    channel: str = "ALL"
-    category: str = "ALL"
-    retailer: str = "ALL"
-    country: str = "ALL"
+    """Selected filter values, keyed by dimension key (config-driven).
+
+    e.g. {"channel": "MODERN", "country": "FRANCE"}. Missing dimensions are
+    treated as 'ALL'.
+    """
+    filters: dict[str, str] = {}
 
 
 class KpiResult(BaseModel):

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config.settings import settings
-
 
 @dataclass(frozen=True)
 class WorkspacePolicy:
@@ -17,7 +15,11 @@ class WorkspacePolicy:
 
 class WorkspacePolicyLoader:
     def load(self, workspace_id: str) -> WorkspacePolicy | None:
-        policy_map = settings.ENTERPRISE_WORKSPACE_POLICY
+        # The policy is table-driven (managed in the workspace-policy config
+        # table, with env fallback) so new workspaces can be onboarded live.
+        from services import workspace_config
+
+        policy_map = workspace_config.get_policy_map()
         row = policy_map.get(workspace_id)
         if not row:
             return None

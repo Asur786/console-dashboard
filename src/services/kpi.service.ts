@@ -40,10 +40,9 @@ function mapKpi(raw: ApiKpiResult): KpiResult {
 /* ------------------------------------------------------------------ */
 function buildQueryString(filters: KpiFilters): string {
   const params = new URLSearchParams();
-  if (filters.channel  !== 'ALL') params.set('channel',  filters.channel);
-  if (filters.category !== 'ALL') params.set('category', filters.category);
-  if (filters.retailer !== 'ALL') params.set('retailer', filters.retailer);
-  if (filters.country  !== 'ALL') params.set('country',  filters.country);
+  for (const [key, value] of Object.entries(filters)) {
+    if (value && value !== 'ALL') params.set(key, value);
+  }
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
